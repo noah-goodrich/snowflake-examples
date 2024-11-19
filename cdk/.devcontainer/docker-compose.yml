@@ -1,0 +1,26 @@
+services:
+  localstack:
+    container_name: "localstack-snowflake"
+    image: localstack/snowflake
+    ports:
+      - "127.0.0.1:4566:4566"
+      - "127.0.0.1:4510-4559:4510-4559"
+      - "127.0.0.1:443:443"
+    environment:
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?}
+    volumes:
+      - "./volume:/var/lib/localstack"
+
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspace:cached
+      - ~/.aws:/home/vscode/.aws:cached
+      - ~/.zshrc:/home/vscode/.zshrc:cached
+    command: sleep infinity
+    network_mode: service:localstack
+
+volumes:
+  devcontainer_volume:

@@ -6,6 +6,8 @@
   "service": "devcontainer",
   "workspaceFolder": "/workspace",
   "runServices": ["localstack"],
+  // "initializeCommand": "./.devcontainer/wait-for-localstack.sh",
+  // "postCreateCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt",
   "features": {},
   "postStartCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt",
 
