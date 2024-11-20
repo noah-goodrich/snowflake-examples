@@ -1,58 +1,85 @@
+# LocalStack Development Environment Setup
 
-# Welcome to your CDK Python project!
+This guide will help you set up a local development environment using LocalStack for AWS + Snowflake service emulation.
 
-This is a blank project for CDK development with Python.
+## Prerequisites
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+Before starting, ensure you have the following installed:
+- VSCode or Cursor IDE
+- Docker CLI or Docker Desktop
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+## Setup Instructions
 
-To manually create a virtualenv on MacOS and Linux:
+### 1. Clone the Example Repository
 
+Clone the snowflake examples repository:
 ```
-$ python3 -m venv .venv
-```
-
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
-
-```
-$ source .venv/bin/activate
+git clone https://github.com/noah-goodrich/snowflake-examples.git
+cd snowflake-examples
 ```
 
-If you are a Windows platform, you would activate the virtualenv like this:
+### 2. Start Docker
+Ensure Docker is running on your system.
 
-```
-% .venv\Scripts\activate.bat
-```
+### 3. Configure AWS CLI Credentials
 
-Once the virtualenv is activated, you can install the required dependencies.
+Create or modify the following AWS configuration files:
 
+In `~/.aws/config`:
 ```
-$ pip install -r requirements.txt
-```
-
-At this point you can now synthesize the CloudFormation template for this code.
-
-```
-$ cdk synth
+[profile localstack]
+region = us-east-1
+output = json
+endpoint_url = http://localhost.localstack.cloud:4566
 ```
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
+In `~/.aws/credentials`:
+```
+[localstack]
+aws_access_key_id = test
+aws_secret_access_key = test
+```
 
-## Useful commands
+### 4. (Optional) Configure Local DNS
 
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
+Add the following line to your `/etc/hosts` file:
+`127.0.0.1 localhost.localstack.cloud`
 
-Enjoy!
+This step can help prevent DNS resolution issues with some LocalStack services.
+
+### 5. Start LocalStack
+
+Run the following command to start your devcontainer with LocalStack:
+```
+docker-compose up # add -d flag to run in detached mode
+```
+
+### 5. Verify Setup
+
+Once LocalStack is running, you can verify your setup with the following commands:
+
+1. Create a test S3 bucket:
+```
+aws s3 mb s3://test-bucket
+```
+
+2. List S3 buckets to verify creation:
+`aws s3 ls`
+
+3. Test Snowflake connectivity:
+`curl -d '{}' snowflake.localhost.localstack.cloud:4566/session`
+
+You should receive the response: `{"success": true}`
+
+## Troubleshooting
+
+If you encounter any issues:
+1. Ensure Docker is running
+2. Verify LocalStack container is running with `docker-compose ps`
+3. Check AWS credentials are properly configured
+4. Ensure ports 4566 and 4510-4559 are not in use by other applications
+5. Verify your /etc/hosts entry if you're having DNS resolution issues
+
+## Next Steps
+
+You now have a working LocalStack environment! You can proceed with developing and testing your AWS applications locally.
