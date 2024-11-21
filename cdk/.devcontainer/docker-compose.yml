@@ -16,7 +16,7 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      - ..:/workspace:cached
+      - ..:/foundation:cached
       - ~/.aws:/home/vscode/.aws:cached
       - ~/.zshrc:/home/vscode/.zshrc:cached
     command: sleep infinity
