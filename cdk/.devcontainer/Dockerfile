@@ -5,7 +5,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
 # Install AWS CDK CLI globally
-RUN npm install -g aws-cdk
+RUN npm install -g aws-cdk aws-cdk-local
 
 RUN pip install awscli
 

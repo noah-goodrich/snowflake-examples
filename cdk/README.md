@@ -306,4 +306,77 @@ After deployment, verify:
  * `cdk diff`        compare deployed stack with current state
  * `cdk docs`        open CDK documentation
 
+## Stack Architecture
+
+Our infrastructure is organized into logical stacks:
+
+### Secrets Management
+Located in `stacks/secrets/`:
+- Manages Snowflake credentials
+- Handles secret rotation
+- Provides secure access to credentials
+
+### Snowflake Resources
+Located in `stacks/snowflake/`:
+
+1. **Databases** (`databases.py`)
+   - Creates BRONZE, SILVER, GOLD, PLATINUM databases
+   - Configures schemas within each database
+   - Sets ownership and permissions
+
+2. **Roles** (`roles.py`)
+   - Creates administrative role (HOID)
+   - Sets up access roles (OWNER, RW, RO)
+   - Configures functional roles
+   - Establishes service roles
+
+3. **Warehouses** (`warehouses.py`)
+   - Creates compute warehouses
+   - Configures size-specific settings
+   - Manages auto-suspension and scaling
+
+4. **Storage** (`storage.py`)
+   - Creates storage integrations
+   - Configures AWS S3 access
+   - Manages IAM roles and policies
+
+5. **Stages** (`stages.py`)
+   - Creates external and internal stages
+   - Configures file formats
+   - Sets up data loading locations
+
+## Configuration Files
+
+Each stack is configured via YAML files in its respective config directory:
+
+### Secrets Configuration
+```yaml
+# stacks/secrets/config/secrets.yaml
+secrets:
+  snowflake:
+    name: "snowflake-admin"
+    description: "Snowflake administrative credentials"
+    rotation:
+      enabled: true
+      interval_days: 90
+```
+
+### Snowflake Configuration
+```yaml
+# stacks/snowflake/config/storage.yaml
+storage_integrations:
+  RAW_DATA:
+    s3_bucket: "raw-data-bucket"
+    aws_role: "SnowflakeLoadRole"
+    enabled: true
+
+# stacks/snowflake/config/stages.yaml
+stages:
+  RAW_LANDING:
+    database: BRONZE
+    schema: RAW
+    storage_integration: RAW_DATA
+    url: "s3://raw-data-bucket/landing/"
+```
+
 Enjoy!

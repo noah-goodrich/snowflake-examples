@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-from aws_cdk import App
-from stacks.secret_stack import SecretStack
-from stacks.snowflake_stack import SnowflakeStack
-from stacks.warehouse_stack import WarehouseStack
+from aws_cdk import App, Environment
+from stacks.stack import FoundationStack
 
 app = App()
 
-# Create stacks
-secret_stack = SecretStack(app, "SecretStack")
-snowflake_stack = SnowflakeStack(
-    app, "SnowflakeStack", secrets=secret_stack.secrets)
-warehouse_stack = WarehouseStack(app, "WarehouseStack", env="DEV")
+env = Environment(
+    account=app.node.try_get_context("account"),
+    region=app.node.try_get_context("region")
+)
+
+FoundationStack(app, "Foundation", env=env)
 
 app.synth()
