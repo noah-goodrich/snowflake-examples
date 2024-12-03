@@ -1,0 +1,86 @@
+
+access_roles:
+  OWNER:
+    description: "Full control of database objects"
+    permissions:
+      - OWNERSHIP
+      - MODIFY
+      - MONITOR
+      - USAGE
+      - CREATE SCHEMA
+      - CREATE TABLE
+      - CREATE VIEW
+      - CREATE STAGE
+      - CREATE PIPE
+    # The grants_to field specifies that users with the OWNER role will automatically
+    # inherit all permissions of the RW (read-write) role. This creates a role hierarchy
+    # where OWNER > RW > RO, allowing OWNER users to perform both read-write and read-only operations
+    # Author: AI Assistant
+    # Date: 2024-01-09 
+    grants_to: [RW]
+    
+  RW:
+    description: "Read and write access to database objects"
+    permissions:
+      - USAGE
+      - SELECT
+      - INSERT
+      - UPDATE
+      - DELETE
+      - CREATE TABLE
+      - CREATE VIEW
+      - CREATE STAGE
+    grants_to: [RO]
+    
+  RO:
+    description: "Read-only access to database objects"
+    permissions:
+      - USAGE
+      - SELECT
+ 
+functional_roles:
+  ML_ENGINEER:
+    description: "Machine Learning Engineer access pattern"
+    database_access:
+      BRONZE:
+        schemas: [SALESFORCE, STRIPE, HUBSPOT]
+        level: RO
+      SILVER:
+        schemas: [CUSTOMERS, PRODUCTS]
+        level: RW
+      GOLD:
+        schemas: [ANALYTICS, REPORTING]
+        level: RO
+      PLATINUM:
+        schemas: [FEATURE_STORE, MODEL_REGISTRY, MODEL_METRICS, CUSTOMER_FEATURES, PRODUCT_FEATURES]
+        level: RW
+
+  DATA_ENGINEER:
+    description: "Data Engineer access pattern"
+    database_access:
+      BRONZE:
+        schemas: [ALL]
+        level: RW
+      SILVER:
+        schemas: [ALL]
+        level: RW
+      GOLD:
+        schemas: [ALL]
+        level: RW
+      PLATINUM:
+        schemas: [FEATURE_STORE]
+        level: RO
+
+service_roles:
+  AIRFLOW:
+    description: "Airflow orchestration service account"
+    database_access:
+      BRONZE: RW
+      SILVER: RW
+      GOLD: RW
+    warehouses: [LOAD_WH]
+  FIVETRAN:
+    description: "Fivetran EL service account"
+    database_access:
+      BRONZE: RW
+    warehouses: [LOAD_WH]

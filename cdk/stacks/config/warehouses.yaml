@@ -1,0 +1,50 @@
+defaults:
+  warehouse_size: XSMALL
+  auto_suspend: 5
+  auto_resume: "true"
+  initially_suspended: "true"
+  min_cluster_count: 1
+  max_cluster_count: 1
+  scaling_policy: STANDARD
+sizes:
+  - XSMALL
+  - SMALL
+  - MEDIUM
+  - LARGE
+  - XLARGE
+
+warehouses:
+  BRONZE:
+    description: "Raw data loading and processing"
+    sizes:
+      - SMALL:
+          auto_suspend: 300
+          min_cluster_count: 1
+          max_cluster_count: 3
+          scaling_policy: ECONOMY
+      - MEDIUM
+
+  SILVER:
+    description: "Data transformation and modeling"
+    sizes: [SMALL, MEDIUM, LARGE]
+
+  GOLD:
+    description: "Business analytics and reporting"
+    sizes: 
+      - XSMALL:
+          auto_suspend: 120
+      - SMALL
+
+  PLATINUM:
+    description: "ML training and inference"
+    sizes: 
+      - MEDIUM:
+          auto_suspend: 600
+          min_cluster_count: 1
+          max_cluster_count: 4
+          scaling_policy: ECONOMY
+      - LARGE:
+          auto_suspend: 600
+          min_cluster_count: 1
+          max_cluster_count: 4
+          scaling_policy: ECONOMY
