@@ -1,0 +1,17 @@
+warehouses:
+  sizes: 
+    - XSMALL
+        auto_suspend: 60
+        auto_resume: true
+        initially_suspended: true
+roles:
+  - HOID
+      description: "Administrative role for platform automation"
+databases:
+  COSMERE:
+  prefix_with_environment: false
+  description: "Administrative database for platform management"
+  schemas:
+    - ADMIN
+    - AUDIT
+    - SECURITY
