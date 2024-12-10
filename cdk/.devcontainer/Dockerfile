@@ -7,7 +7,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
 # Install AWS CDK CLI globally
 RUN npm install -g aws-cdk aws-cdk-local
 
-RUN pip install awscli
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" \
+    && unzip awscliv2.zip \
+    && sudo ./aws/install
 
 # Install additional tools
 RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
@@ -15,5 +17,5 @@ RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
     curl \
     jq \
     iputils-ping \
-    openssl
-    
+    openssl \
+    vim

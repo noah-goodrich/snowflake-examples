@@ -9,14 +9,10 @@ services:
       - "127.0.0.1:443:443"
     environment:
       - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?}
+      - ACTIVATE_PRO=0
       - DEBUG=1
     volumes:
       - "./volume:/var/lib/localstack"
-    networks:
-      devcontainer_network:
-        aliases:
-          - localstack
-          - snowflake.localhost.localstack.cloud
 
   devcontainer:
     build:
@@ -27,12 +23,7 @@ services:
       - ~/.aws:/home/vscode/.aws:cached
       - ~/.zshrc:/home/vscode/.zshrc:cached
     command: sleep infinity
-    networks:
-      - devcontainer_network
-
-networks:
-  devcontainer_network:
-    name: devcontainer_network
+    network_mode: service:localstack
 
 volumes:
   devcontainer_volume:

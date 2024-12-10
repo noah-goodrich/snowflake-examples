@@ -1,21 +1,9 @@
 import pytest
-import subprocess
 from snowflake.core import Root
 from snowflake.snowpark import Session
 from typing import Generator
-import yaml
-
-
-@pytest.fixture(scope="session")
-def env_config() -> dict:
-    with open('stacks/config/environments.yaml', 'r') as f:
-        return yaml.safe_load(f)
-
-
-@pytest.fixture(scope="session")
-def admin_config() -> dict:
-    with open('stacks/snowflake/config/admin.yaml', 'r') as f:
-        return yaml.safe_load(f)
+import boto3
+import json
 
 
 @pytest.fixture(scope="session")
@@ -31,15 +19,31 @@ def snow() -> Generator[Root, None, None]:
         - Uses test environment credentials
     """
 
-    # Create connection to LocalStack Snowflake instance
+    # Get credentials from AWS Secrets Manager
+    secret_name = "snowflake/accountadmin"  # adjust this to your secret name
+    session = boto3.session.Session()
+    client = session.client(service_name='secretsmanager')
+
+    """
+    aws secretsmanager create-secret --name snowflake/accountadmin --secret-string='{"username":"<username>","password":"<password>","account":"<account>","host":"<host>","role":"ACCOUNTADMIN"}'
+    
+    """
+    try:
+        secret_value = client.get_secret_value(SecretId=secret_name)
+        secret = json.loads(secret_value['SecretString'])
+    except Exception as e:
+        raise Exception(
+            f"Failed to get Snowflake credentials from Secrets Manager: {e}")
+
+    # Create connection to Snowflake
     session = Session.builder.configs({
-        "account": "test",
-        "host": "snowflake.localhost.localstack.cloud",
-        "user": "test",
-        "password": "test",
-        "role": "test",
-        "warehouse": "test",
-        "database": "test"
+        "account": secret['account'],
+        "host": secret['host'],
+        "user": secret['username'],
+        "password": secret['password'],
+        "role": secret['role'],
+        # default to COMPUTE_WH if not specified
+        "warehouse": 'COMPUTE_WH'
     }).create()
 
     snow = Root(session)

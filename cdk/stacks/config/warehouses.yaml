@@ -6,6 +6,7 @@ defaults:
   min_cluster_count: 1
   max_cluster_count: 1
   scaling_policy: STANDARD
+  prefix_with_environment: true
 sizes:
   - XSMALL
   - SMALL
@@ -22,18 +23,16 @@ warehouses:
           min_cluster_count: 1
           max_cluster_count: 3
           scaling_policy: ECONOMY
-      - MEDIUM
 
   SILVER:
     description: "Data transformation and modeling"
-    sizes: [SMALL, MEDIUM, LARGE]
+    sizes: [ALL]
 
   GOLD:
     description: "Business analytics and reporting"
     sizes: 
       - XSMALL:
           auto_suspend: 120
-      - SMALL
 
   PLATINUM:
     description: "ML training and inference"

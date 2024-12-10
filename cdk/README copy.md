@@ -1,8 +1,8 @@
 # Snowflake Data Platform Foundation
 
-This project implements a scalable data platform using Snowflake, managed through infrastructure as code using AWS CDK.
+This project contains the foundational infrastructure for our Snowflake data platform, managed via AWS CDK.
 
-> **Note**: For development environment setup, please follow the instructions in `../vscode-devcontainer/README.md` first.
+> **Prerequisites**: Before proceeding, please follow the setup instructions in the `../vscode-devcontainer/README.md` first. This will ensure your development environment is properly configured.
 
 ## Initial Setup
 

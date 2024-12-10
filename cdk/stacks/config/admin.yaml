@@ -1,17 +1,18 @@
 warehouses:
-  sizes: 
-    - XSMALL
-        auto_suspend: 60
-        auto_resume: true
-        initially_suspended: true
+  COSMERE:
+    sizes: [ALL]
 roles:
-  - HOID
-      description: "Administrative role for platform automation"
+  HOID:
+    description: "Administrative role for platform automation"
+    grants_to: [SYSADMIN, SECURITYADMIN]
+service_users:
+  SVC_HOID:
+    prefix_with_environment: false
 databases:
   COSMERE:
-  prefix_with_environment: false
-  description: "Administrative database for platform management"
-  schemas:
-    - ADMIN
-    - AUDIT
-    - SECURITY
+    prefix_with_environment: false
+    description: "Administrative database for platform management"
+    schemas:
+      - ADMIN
+      - AUDIT
+      - SECURITY
