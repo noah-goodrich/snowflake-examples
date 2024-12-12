@@ -20,9 +20,9 @@ def test_create_if_not_exists_database(stack: SnowStack):
         "TEST_DB2", "Test Database", prefix_with_environment=True)
 
     # Verify database exists and has correct properties
-    db = stack.snow.databases["DEV_TEST2_DB"].fetch()
+    db = stack.snow.databases["DEV_TEST_DB2"].fetch()
     assert db is not None
-    assert db.name == "DEV_TEST2_DB"
+    assert db.name == "DEV_TEST_DB2"
     assert db.comment == "Test Database"
 
 
@@ -58,27 +58,6 @@ def test_create_or_alter_warehouse_with_overrides(stack: SnowStack):
     assert wh.min_cluster_count == 2
     assert wh.max_cluster_count == 3
 
-
-@pytest.mark.skip("Role creation not implemented yet")
-def test_role_creation(stack: SnowStack):
-    """Test role creation with basic configuration"""
-    test_config = {
-        "warehouses": ["TEST_WAREHOUSE"],
-        "databases": {
-            "TEST_DB": ["USAGE"]
-        }
-    }
-
-    stack.role("TEST_ROLE", test_config)
-
-    # Verify role exists
-    role = stack.snow.roles["TEST_ROLE"].describe()
-    assert role is not None
-    assert role.name == "TEST_ROLE"
-
-
-@pytest.mark.skip("User creation not implemented yet")
-def test_user_creation(stack: SnowStack):
     """Test user creation with basic configuration"""
     test_config = {
         "password": "TestPassword123!",
@@ -128,15 +107,11 @@ def setup_teardown(stack: SnowStack):
     # Clean up any resources created during tests
     try:
         stack.snow.warehouses["dev_test_db_xsmall"].drop(True)
-    except:
-        pass
-
-    try:
         stack.snow.warehouses["prod_test_db_small"].drop(True)
+        stack.snow.databases["DEV_TEST_DB"].drop(True)
+        stack.snow.databases["DEV_TEST_DB2"].drop(True)
     except:
         pass
-
-    stack.snow.databases["DEV_TEST_DB"].drop(True)
 
 
 def test_create_or_alter_access_role(stack: SnowStack):

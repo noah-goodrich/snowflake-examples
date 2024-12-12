@@ -26,8 +26,6 @@ class SnowStack(Stack):
 
         # Initialize properties
         self.snow = snow
-        self.warehouse_defaults = None
-        self.warehouses = None
 
     def load_config(self, path: str) -> dict:
         """Load and parse a YAML configuration file.
@@ -110,9 +108,15 @@ class SnowStack(Stack):
         owner.grant_privileges(
             ['OWNERSHIP'], 'DATABASE', securable=RoleSecurable(name=db))
         owner.grant_future_privileges(
-            ['OWNERSHIP'], 'DATABASE', containing_scope=RoleContainingScope(name=db))
+            ['OWNERSHIP'], 'SCHEMA', containing_scope=RoleContainingScope(database=db))
+        owner.grant_future_privileges(
+            ['OWNERSHIP'], 'TABLE', containing_scope=RoleContainingScope(database=db))
         owner.grant_role(role_type='DATABASE ROLE',
-                         role=RoleSecurable(name=rw.name))
+                         role=RoleSecurable(database=db, name=rw.name))
+
+        current_role = self.snow.roles[self.snow.session.get_current_role()]
+        current_role.grant_role(role_type='ROLE',
+                                role=RoleSecurable(name=owner.name))
 
         self.snow
 
