@@ -27,22 +27,6 @@ class SnowStack(Stack):
         # Initialize properties
         self.snow = snow
 
-    def load_config(self, path: str) -> dict:
-        """Load and parse a YAML configuration file.
-
-        Args:
-            path: Path to the YAML configuration file
-
-        Returns:
-            dict: Parsed YAML configuration
-
-        Raises:
-            FileNotFoundError: If configuration file does not exist
-            yaml.YAMLError: If YAML parsing fails
-        """
-        with open(path, 'r') as f:
-            return yaml.safe_load(f)
-
     @classmethod
     def get_secret(cls, secret_name: str) -> Dict[str, Any]:
         """Get secret from AWS Secrets Manager"""
