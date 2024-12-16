@@ -106,16 +106,13 @@ class SnowStack(Stack):
 
         return self
 
-    def create_or_alter_warehouse(self, db: str, size: str, overrides: dict | None = None) -> 'SnowStack':
+    def create_or_alter_warehouse(self, db: str, size: str, overrides: dict | None = {}) -> 'SnowStack':
         """Create or alter a warehouse with the given configuration.
         Args:
             db: Database name
             size: Warehouse size
             environment: Environment name (dev, stg, prod, etc.)
         """
-        if self.warehouses is None:
-            self.warehouses = {}
-
         defaults = {
             'warehouse_size': 'XSMALL',
             'auto_suspend': 5,
@@ -204,10 +201,6 @@ class SnowStack(Stack):
                 self.snow.roles[name].grant_role(grant_role)
 
         return self
-
-    def create_or_alter_user(self, user: str, config: dict) -> 'SnowStack':
-        """Create a user with the given configuration"""
-        pass
 
     def deploy(self):
         """Deploy all resources defined in the stack"""

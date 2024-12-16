@@ -41,15 +41,12 @@ def test_create_or_alter_warehouse_no_overrides(stack: SnowStack):
 
 def test_create_or_alter_warehouse_with_overrides(stack: SnowStack):
     # Test warehouse with custom properties
-    custom_config = {
-        "SMALL": {
-            "auto_suspend": 300,
-            "min_cluster_count": 2,
-            "max_cluster_count": 3,
-            "prefix_with_environment": False
-        }
-    }
-    stack.create_or_alter_warehouse("TEST_DB", custom_config)
+    stack.create_or_alter_warehouse("TEST_DB", 'SMALL',  {
+        "auto_suspend": 300,
+        "min_cluster_count": 2,
+        "max_cluster_count": 3,
+        "prefix_with_environment": False
+    })
 
     wh_name = "test_db_small".upper()
     wh = stack.snow.warehouses[wh_name].fetch()
@@ -57,40 +54,6 @@ def test_create_or_alter_warehouse_with_overrides(stack: SnowStack):
     assert wh.auto_suspend == 300
     assert wh.min_cluster_count == 2
     assert wh.max_cluster_count == 3
-
-    """Test user creation with basic configuration"""
-    test_config = {
-        "password": "TestPassword123!",
-        "roles": ["TEST_ROLE"],
-        "default_warehouse": "TEST_WAREHOUSE",
-        "default_role": "TEST_ROLE"
-    }
-
-    stack.user("TEST_USER", test_config)
-
-    # Verify user exists with correct properties
-    user = stack.snow.users["TEST_USER"].describe()
-    assert user is not None
-    assert user.name == "TEST_USER"
-    assert user.default_role == "TEST_ROLE"
-    assert user.default_warehouse == "TEST_WAREHOUSE"
-
-
-def test_full_deployment(stack: SnowStack):
-    """Test deploying multiple resources together"""
-    # Create database
-    db_config = {
-        "description": "Test Database",
-        "prefix_with_environment": True
-    }
-    stack.database("TEST_DB", db_config)
-
-    # Create warehouse
-    stack.warehouse("TEST_DB", "XSMALL", "DEV")
-
-    # Verify all resources exist
-    assert stack.snow.databases["TEST_DB"].describe() is not None
-    assert stack.snow.warehouses["dev_test_db_xsmall"].describe() is not None
 
 
 @pytest.fixture(autouse=True)
@@ -112,58 +75,3 @@ def setup_teardown(stack: SnowStack):
         stack.snow.databases["DEV_TEST_DB2"].drop(True)
     except:
         pass
-
-
-def test_create_or_alter_access_role(stack: SnowStack):
-    """Test creation of database-specific access roles"""
-
-    # Create read-only access role
-    stack.create_or_alter_access_role(
-        database="TEST_DB",
-        level="RO"
-    )
-
-    # Create read-write access role that inherits from RO
-    stack.create_or_alter_access_role(
-        database="TEST_DB",
-        level="RW",
-        grants_to=["RO"]
-    )
-
-    # Verify roles exist and have correct properties
-    ro_role = stack.snow.databases["DEV_TEST_DB"] \
-        .roles["DEV_TEST_DB_RO"] \
-        .fetch()
-    assert ro_role is not None
-    assert ro_role.name == "DEV_TEST_DB_RO"
-
-    # Verify RO role has correct permissions
-    ro_grants = ro_role.show_grants()
-    assert "USAGE" in ro_grants
-    assert "SELECT" in ro_grants
-
-    # Verify RW role and inheritance
-    rw_role = stack.snow.databases["DEV_TEST_DB"] \
-        .roles["DEV_TEST_DB_RW"] \
-        .fetch()
-    assert rw_role is not None
-    assert rw_role.name == "DEV_TEST_DB_RW"
-
-    # Verify RW role has correct permissions and inheritance
-    rw_grants = rw_role.show_grants()
-    assert "INSERT" in rw_grants
-    assert "UPDATE" in rw_grants
-    assert "DELETE" in rw_grants
-
-    inherited_roles = rw_role.show_grants_to_roles()
-    assert "DEV_TEST_DB_RO" in inherited_roles
-
-
-def test_create_or_alter_access_role_invalid_level(stack: SnowStack):
-    """Test that invalid access levels raise appropriate errors"""
-    with pytest.raises(ValueError) as exc_info:
-        stack.create_or_alter_access_role(
-            database="DEV_TEST_DB",
-            level="INVALID_LEVEL"
-        )
-    assert "Invalid access level" in str(exc_info.value)

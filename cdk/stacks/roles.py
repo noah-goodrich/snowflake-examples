@@ -32,40 +32,9 @@ class RoleStack(SnowStack):
     def deploy(self):
         """Deploy all roles"""
         # First deploy access roles for each database
-        for database in self.databases:
-            self.deploy_database_access_roles(database)
-
         # Then deploy other roles that depend on access roles
         self.deploy_functional_roles()
         self.deploy_service_roles()
-
-    def deploy_database_access_roles(self, database: str):
-        """Deploy RO, RW, and OWNER roles for a specific database"""
-        # Create RO role
-        ro_role = f"{self.env}_{database}_RO"
-        self.create_or_alter_role(
-            name=ro_role,
-            description=f"Read-only access to {database} database",
-            permissions=self.ACCESS_LEVELS["RO"]
-        )
-
-        # Create RW role
-        rw_role = f"{self.env}_{database}_RW"
-        self.create_or_alter_role(
-            name=rw_role,
-            description=f"Read-write access to {database} database",
-            permissions=self.ACCESS_LEVELS["RW"],
-            grants_to=[ro_role]
-        )
-
-        # Create OWNER role
-        owner_role = f"{self.env}_{database}_OWNER"
-        self.create_or_alter_role(
-            name=owner_role,
-            description=f"Full control of {database} database",
-            permissions=self.ACCESS_LEVELS["OWNER"],
-            grants_to=[rw_role]
-        )
 
     def deploy_functional_roles(self):
         """Deploy functional roles for different job functions"""

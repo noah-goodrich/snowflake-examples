@@ -1,1 +1,3 @@
-    aws secretsmanager create-secret --name snowflake/accountadmin --secret-string='{"username":"gabriel1836","password":"MesaMission2004!","account":"FNB23501","host":"FNB23501.us-west-2.snowflakecomputing.com","role":"ACCOUNTADMIN"}'
+aws secretsmanager create-secret --name snowflake/accountadmin --secret-string='{"username":"gabriel1836","password":"MesaMission2004!","account":"FNB23501","host":"FNB23501.us-west-2.snowflakecomputing.com","role":"ACCOUNTADMIN"}'
+
+aws secretsmanager create-secret --name snowflake/accountadmin --secret-string='{"username":"test","password":"test","account":"FNB23501","host":"FNB23501.us-west-2.snowflakecomputing.com","role":"ACCOUNTADMIN"}'
