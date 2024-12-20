@@ -1,6 +1,0 @@
-defaults:
-  prefix_with_environment: true
-
-service_users:
-  FIVETRAN
-  AIRFLOW
