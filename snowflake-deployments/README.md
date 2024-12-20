@@ -58,34 +58,27 @@ Implements the medallion architecture with four core layers:
                       |  HOID (Admin)  |
                       +----------------+
                              |
-                      +----------------+
-                      | Database Roles |
-                      +----------------+
-                      | BRONZE_RO      |
-                      | BRONZE_RW      |-----------------+------------------+
-                      | SILVER_RO      |                 |                  |
-                      | SILVER_RW      |        +----------------+  +----------------+
-                      | GOLD_RO        |        |  Service Roles |  |   Function    |
-                      | GOLD_RW        |        +----------------+  |    Roles      |
-                      | PLATINUM_RO    |        | SVC_AIRFLOW   |  +----------------+
-                      | PLATINUM_RW    |        | SVC_FIVETRAN  |  | ML_ENGINEER     |
-                      +----------------+        | SVC_HOID      |  |  DATA_ENGINEER  |
-                                               +----------------+  |  DATA_ANALYST   |
-                                                                   +-----------------+
-
+                      +----------------------+
+                      |      Database Roles  |
+                      +----------------------+
+                      | COSMERE.READ_ONLY    |
+                      | COSMERE.READ_WRITE   |
+                      | BRONZE.READ_ONLY     |
+                      | BRONZE.READ_WRITE    |-----------------+------------------+
+                      | SILVER.READ_ONLY     |                 |                  |
+                      | SILVER.READ_WRITE    |        +----------------+  +-----------------+
+                      | GOLD.READ_ONLY       |        |  Service Roles |  |    Function     |
+                      | GOLD.READ_WRITE      |        +----------------+  |     Roles       |
+                      | PLATINUM.READ_ONLY   |        |  SVC_AIRFLOW   |  +-----------------+
+                      | PLATINUM.READ_WRITE  |        |  SVC_FIVETRAN  |  | ML_ENGINEER     |
+                      +----------------------+        |  SVC_HOID      |  |  DATA_ENGINEER  |
+                                                      +---------------+   |  DATA_ANALYST   |
+                                                                          +-----------------+
 ## Getting Started
 
 ### 1. Environment Setup
 
-    # Create virtual environment
-    python -m venv .venv
-
-    # Activate virtual environment
-    source .venv/bin/activate  # Unix
-    .venv\Scripts\activate.bat # Windows
-
-    # Install dependencies
-    pip install -r requirements.txt
+For development environment setup, please follow the instructions in the [vscode-devcontainer project](`../vscode-devcontainer/README.md`) first.
 
 ### 2. AWS Configuration
 
@@ -101,7 +94,7 @@ Implements the medallion architecture with four core layers:
             "private_key": "your-private-key",
             "host": "your-host",
             "role": "ACCOUNTADMIN"
-        }'
+        }
 
 ### 3. Initial Deployment
 
@@ -150,7 +143,7 @@ Run tests using pytest:
 ## Best Practices
 
 ### 1. Role Management
-- Never grant access roles directly to users
+- Never grant database roles directly to users
 - Use functional roles for user access
 - Follow principle of least privilege
 - Regular audit of role memberships
