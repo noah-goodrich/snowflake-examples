@@ -1,0 +1,19 @@
+storage_integrations:
+  RAW_DATA:
+    s3_bucket: "raw-data-bucket"
+    aws_role: "SnowflakeLoadRole"
+    storage_allowed_locations:
+      - "s3://raw-data-bucket/landing/"
+      - "s3://raw-data-bucket/archive/"
+    storage_blocked_locations:
+      - "s3://raw-data-bucket/sensitive/"
+    comment: "Integration for raw data ingestion"
+
+  EXPORT_DATA:
+    s3_bucket: "export-data-bucket"
+    aws_role: "SnowflakeExportRole"
+    storage_allowed_locations:
+      - "s3://export-data-bucket/outbound/"
+    storage_blocked_locations:
+      - "s3://export-data-bucket/internal/"
+    comment: "Integration for data exports"

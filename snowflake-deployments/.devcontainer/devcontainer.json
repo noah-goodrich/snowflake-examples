@@ -1,0 +1,29 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the
+// README at: https://github.com/devcontainers/templates/tree/main/src/python
+{
+  "name": "Python CDK with LocalStack",
+  "dockerComposeFile": "./docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/foundation",
+  "runServices": ["localstack"],
+  "features": {},
+  "postStartCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python", "ms-python.vscode-pylance"],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python3"
+      }
+    }
+  },
+
+  "remoteEnv": {
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "AWS_PROFILE": "localstack"
+  },
+
+  "shutdownAction": "stopCompose",
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true
+}
