@@ -4,8 +4,6 @@ FROM mcr.microsoft.com/devcontainers/python:1-3.11-bullseye
 RUN curl -fsSL https://deb.nodesource.com/setup_18.x | bash - \
     && apt-get install -y nodejs
 
-# Install AWS CDK CLI globally
-RUN npm install -g aws-cdk aws-cdk-local
 
 RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip" \
     && unzip awscliv2.zip \

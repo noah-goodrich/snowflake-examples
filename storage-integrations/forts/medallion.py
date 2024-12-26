@@ -23,7 +23,19 @@ from .fort import SnowFort
 
 
 class MedallionFort(SnowFort):
-    """Implements the medallion architecture for data warehousing"""
+    """Implements the medallion architecture for data warehousing.
+
+    This class extends SnowFort to implement a four-tier medallion architecture:
+    - BRONZE: Raw data landing zone
+    - SILVER: Standardized and cleansed data
+    - GOLD: Business-ready aggregates and metrics
+    - PLATINUM: ML-ready features and model artifacts
+
+    Each tier includes multiple warehouses of different sizes and standard schemas.
+
+    Attributes:
+        WAREHOUSE_SIZES (List[str]): Available warehouse sizes and their credit costs
+    """
 
     # Standard warehouse configurations
     WAREHOUSE_SIZES = [
@@ -37,7 +49,15 @@ class MedallionFort(SnowFort):
     ]
 
     def create_standard_warehouses(self, db_name: str, overrides: dict = None):
-        """Create standard warehouses for a database"""
+        """Create standard warehouses for a database.
+
+        Creates warehouses of all standard sizes for the specified database,
+        applying any override settings provided.
+
+        Args:
+            db_name (str): Name of the database
+            overrides (dict, optional): Override default warehouse settings. Defaults to None.
+        """
         for size in self.WAREHOUSE_SIZES:
             self.create_or_alter_warehouse(
                 db=db_name,
@@ -46,7 +66,13 @@ class MedallionFort(SnowFort):
             )
 
     def deploy_bronze(self):
-        """Deploy BRONZE database and components"""
+        """Deploy BRONZE database and components.
+
+        Creates:
+        - Standard warehouses with 5-minute auto-suspend
+        - BRONZE database for raw data landing
+        - Standard schemas: salesforce, airflow, app
+        """
         db_name = 'BRONZE'
 
         # Create standard warehouses
@@ -69,7 +95,13 @@ class MedallionFort(SnowFort):
             )
 
     def deploy_silver(self):
-        """Deploy SILVER database and components"""
+        """Deploy SILVER database and components.
+
+        Creates:
+        - Standard warehouses with 5-minute auto-suspend and multi-clustering (1-3)
+        - SILVER database for standardized and cleansed data
+        - Standard schemas: RAW, STAGE
+        """
         db_name = 'SILVER'
 
         # Create standard warehouses
@@ -94,7 +126,13 @@ class MedallionFort(SnowFort):
             )
 
     def deploy_gold(self):
-        """Deploy GOLD database and components"""
+        """Deploy GOLD database and components.
+
+        Creates:
+        - Standard warehouses with 60-minute auto-suspend and multi-clustering (1-3)
+        - GOLD database for business-ready metrics
+        - Standard schemas: METRICS, REPORTS
+        """
         db_name = 'GOLD'
 
         # Create standard warehouses
@@ -119,7 +157,15 @@ class MedallionFort(SnowFort):
             )
 
     def deploy_platinum(self):
-        """Deploy PLATINUM database and components"""
+        """Deploy PLATINUM database and components.
+
+        Creates:
+        - Smaller warehouses (XS-L) with standard configuration
+        - Larger warehouses (XL-XXXL) with Snowpark optimization
+        - All warehouses have 60-minute auto-suspend and multi-clustering (1-4)
+        - PLATINUM database for ML features and artifacts
+        - Standard schemas: FEATURES, MODELS, EXPERIMENTS
+        """
         db_name = 'PLATINUM'
 
         # Create smaller warehouses with standard config
@@ -163,7 +209,14 @@ class MedallionFort(SnowFort):
             )
 
     def deploy(self):
-        """Deploy the complete medallion architecture"""
+        """Deploy the complete medallion architecture.
+
+        Deploys all four tiers of the medallion architecture in order:
+        1. BRONZE (raw data)
+        2. SILVER (cleansed data)
+        3. GOLD (business metrics)
+        4. PLATINUM (ML features)
+        """
         self.deploy_bronze()
         self.deploy_silver()
         self.deploy_gold()

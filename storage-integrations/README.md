@@ -1,5 +1,7 @@
 # Snowflake Data Platform Foundation
 
+![SnowFort](snow_fort.png)
+
 A scalable data platform implementation using Snowflake, with infrastructure managed through Python code. This project follows a "fort" pattern where each major component is encapsulated in its own fort class with specific responsibilities.
 
 ## Directory Structure
