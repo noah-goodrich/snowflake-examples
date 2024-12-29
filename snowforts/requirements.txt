@@ -1,9 +1,0 @@
-aws-cdk-lib>=2.167.1
-botocore==1.35.64
-constructs>=10.0.0,<11.0.0
-snowflake
-snowflake-snowpark-python
-cryptography>=41.0.0
-boto3>=1.26.0
-aws-cdk.aws_lambda_python_alpha
-PyYAML>=6.0.0
