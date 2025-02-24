@@ -2,19 +2,17 @@ import pytest
 import boto3
 import json
 from unittest.mock import patch, MagicMock
-from aws_cdk import App
-from ....forts.admin import AdminFort
-from snowflake.core.warehouse import Warehouse
-from snowflake.core.database import Database
-from snowflake.core.role import Role
-from snowflake.core.user import User
+from forts.admin import AdminFort
+from resources.warehouse import WarehouseConfig
+from resources.database import DatabaseConfig
+from resources.role import RoleConfig
+from resources.user import UserConfig
 
 
 @pytest.fixture(scope="module")
 def admin_fort(snow) -> AdminFort:
     """Create a fresh Admin stack instance for each test"""
-    stack = AdminFort(snow=snow, environment="dev")
-    return stack
+    return AdminFort(snow=snow, environment="dev")
 
 
 @pytest.fixture
@@ -35,119 +33,176 @@ def mock_snowpark_session():
         yield mock_session
 
 
+@pytest.fixture(scope='module', autouse=True)
+def cleanup(admin_fort):
+    """Cleanup resources before and after each test"""
+    try:
+        admin_fort.warehouse_manager.drop("COSMERE_XS")
+        admin_fort.database_manager.drop("COSMERE", cascade=True)
+        admin_fort.role_manager.drop("HOID", cascade=True)
+        admin_fort.user_manager.drop("SVC_HOID")
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+
+    yield
+
+    try:
+        admin_fort.warehouse_manager.drop("COSMERE_XS")
+        admin_fort.database_manager.drop("COSMERE", cascade=True)
+        admin_fort.role_manager.drop("HOID", cascade=True)
+        admin_fort.user_manager.drop("SVC_HOID")
+    except Exception as e:
+        print(f"Cleanup error: {e}")
+
+
 def test_cosmere_xs_warehouse_creation(admin_fort):
-    """Test COSMERE_XS warehouse creation with configuration"""
+    """Test end-to-end COSMERE_XS warehouse creation"""
+    # Deploy the warehouse
+    warehouse = admin_fort.warehouse_manager.create(WarehouseConfig(
+        name='COSMERE_XS',
+        size='XSMALL',
+        auto_suspend=1,
+        auto_resume=True,
+        prefix_with_environment=False
+    ))
+
     # Verify warehouse exists with correct properties
-    wh = admin_fort.snow.warehouses["COSMERE_XS"].fetch()
-    assert wh is not None
-    assert wh.name == "COSMERE_XS"
-    assert wh.warehouse_size == "X-Small"
-    assert wh.auto_suspend == 1
-    assert wh.auto_resume == 'true'
-    # assert wh.initially_suspended == None  # TODO: fix this. Don't know why it's not working. --ndg 12/12/2024
+    assert warehouse is not None
+    assert warehouse.name == "COSMERE_XS"
+    assert warehouse.warehouse_size == "XSMALL"
+    assert warehouse.auto_suspend == 1
+    assert warehouse.auto_resume == 'true'
 
 
 def test_cosmere_database_creation(admin_fort):
-    """Test COSMERE database creation with schemas"""
-    # Verify database exists
-    db = admin_fort.snow.databases["COSMERE"].fetch()
-    assert db is not None
-    assert db.name == "COSMERE"
-    assert db.comment == "Administrative database for platform management"
+    """Test end-to-end COSMERE database creation with schemas"""
+    # Deploy the database
+    database = admin_fort.database_manager.create(DatabaseConfig(
+        name='COSMERE',
+        schemas=['LOGS', 'AUDIT', 'ADMIN', 'SECURITY'],
+        comment='Administrative database for platform management',
+        prefix_with_environment=False
+    ))
 
-    # Verify schemas exist
-    schemas = admin_fort.snow.databases["COSMERE"].schemas
-    assert "ADMIN" in schemas
+    # Verify database exists
+    assert database is not None
+    assert database.name == "COSMERE"
+
+    # Verify schemas
+    schemas = [schema.name for schema in database.schemas]
+    assert "LOGS" in schemas
     assert "AUDIT" in schemas
+    assert "ADMIN" in schemas
     assert "SECURITY" in schemas
 
 
 def test_hoid_role_creation(admin_fort):
-    """Test HOID administrative role creation"""
+    """Test end-to-end HOID role creation with privileges"""
+    # Deploy the role
+    role = admin_fort.role_manager.create(RoleConfig(
+        name='HOID',
+        comment='Administrative role for COSMERE',
+        granted_roles=['SECURITYADMIN', 'SYSADMIN'],
+        prefix_with_environment=False
+    ))
 
     # Verify role exists
-    role = admin_fort.snow.roles["HOID"]
     assert role is not None
     assert role.name == "HOID"
 
-    # Verify role has been granted system roles
-    grants = list(admin_fort.snow.roles["HOID"].iter_grants_to())
-    granted_roles = [grant.securable.name for grant in grants]
+    # Verify privileges
+    grants = admin_fort.snow.session.sql("SHOW GRANTS TO ROLE HOID").collect()
+    roles = [row['role'] for row in grants]
+    assert "SECURITYADMIN" in roles
+    assert "SYSADMIN" in roles
+
+
+def test_svc_hoid_user_creation(admin_fort, mock_boto3_client):
+    """Test end-to-end service account creation"""
+    # Mock AWS secrets
+    mock_boto3_client.get_secret_value.return_value = {
+        'SecretString': '{"private_key": "test_key"}'
+    }
+
+    # Create service account
+    user = admin_fort.user_manager.create(UserConfig(
+        name='SVC_HOID',
+        default_role='HOID',
+        rsa_public_key="TEST_KEY",
+        comment='Service account for administrative automation',
+        prefix_with_environment=False
+    ))
+
+    # Verify user exists
+    assert user is not None
+    assert user.name == "SVC_HOID"
+    assert user.default_role == "HOID"
+
+
+def test_complete_admin_deployment(admin_fort, mock_boto3_client):
+    """Test end-to-end admin deployment"""
+    # Mock AWS Secrets Manager for storing credentials
+    stored_secret = None
+
+    def mock_create_secret(**kwargs):
+        nonlocal stored_secret
+        stored_secret = kwargs['SecretString']
+        return {'ARN': 'test-arn', 'Name': kwargs['Name']}
+
+    def mock_get_secret(**kwargs):
+        return {'SecretString': stored_secret}
+
+    mock_boto3_client.create_secret.side_effect = mock_create_secret
+    mock_boto3_client.get_secret_value.side_effect = mock_get_secret
+
+    # Deploy everything
+    admin_fort.deploy()
+
+    # Verify core components exist
+    assert admin_fort.role_manager.get("HOID") is not None
+    assert admin_fort.user_manager.get("SVC_HOID") is not None
+    assert admin_fort.warehouse_manager.get("COSMERE_XS") is not None
+    assert admin_fort.database_manager.get("COSMERE") is not None
+
+    # Verify HOID role has required system privileges
+    grants = admin_fort.snow.session.sql("SHOW GRANTS TO ROLE HOID").collect()
+    granted_roles = [row['role'] for row in grants]
     assert "SECURITYADMIN" in granted_roles
     assert "SYSADMIN" in granted_roles
 
+    # Verify SVC_HOID user configuration
+    user_desc = admin_fort.snow.session.sql("DESC USER SVC_HOID").collect()
+    user_props = {row['property']: row['value'] for row in user_desc}
+    assert user_props['DEFAULT_ROLE'] == 'HOID'
+    assert user_props['DISABLED'] == 'false'
+    assert 'RSA_PUBLIC_KEY_FP' in user_props  # Verify key was set
 
-def test_svc_hoid_user_creation(admin_fort):
-    """Test service account creation and configuration"""
+    # Verify COSMERE_XS warehouse configuration
+    wh_desc = admin_fort.snow.session.sql(
+        "DESC WAREHOUSE COSMERE_XS").collect()
+    wh_props = {row['property']: row['value'] for row in wh_desc}
+    assert wh_props['WAREHOUSE_SIZE'] == 'XSMALL'
+    assert wh_props['AUTO_SUSPEND'] == '1'
+    assert wh_props['AUTO_RESUME'] == 'true'
 
-    # Verify user exists
-    user = admin_fort.snow.users["SVC_HOID"].fetch()
-    assert user is not None
-    assert user.name == "SVC_HOID"
-    assert user.comment == "Service account for administrative automation"
-    assert user.default_role == "HOID"
-    assert user.default_warehouse == None
+    # Verify COSMERE database and schemas
+    schemas = admin_fort.snow.session.sql(
+        "SHOW SCHEMAS IN DATABASE COSMERE").collect()
+    schema_names = [row['name'] for row in schemas]
+    for schema in ['LOGS', 'AUDIT', 'ADMIN', 'SECURITY']:
+        assert schema in schema_names
 
-    # Verify role grant
-    grants = list(admin_fort.snow.users["SVC_HOID"].iter_grants_to())
-    assert len(grants) == 1
-    grant = grants[0]
-    assert grant.securable.name == "HOID"
-    assert grant.securable_type == "ROLE"
+    # Verify secret was created with correct format
+    mock_boto3_client.create_secret.assert_called_once()
+    secret_call = mock_boto3_client.create_secret.call_args[1]
+    assert secret_call['Name'] == "snowflake/admin"
 
-
-# def test_admin_deploy_creates_secrets(admin_stack, mock_boto3_client):
-#     """Test that deploy creates necessary secrets in AWS Secrets Manager"""
-
-#     # Verify secret was created with correct structure
-#     mock_boto3_client.create_secret.assert_called_once()
-#     secret_args = mock_boto3_client.create_secret.call_args[1]
-#     assert secret_args['Name'] == 'snowflake/admin'
-
-#     secret_data = json.loads(secret_args['SecretString'])
-#     assert 'username' in secret_data
-#     assert secret_data['username'] == 'SVC_HOID'
-#     assert 'private_key' in secret_data
-#     assert 'account' in secret_data
-#     assert 'host' in secret_data
-#     assert secret_data['role'] == 'HOID'
-
-
-def test_admin_deploy_creates_snowpark_session(admin_fort, mock_snowpark_session, mock_boto3_client):
-    """Test that deploy creates Snowpark session with correct configuration"""
-    assert admin_fort.snow is not None
-    assert admin_fort.snow.session.get_current_role().replace('"', '') == 'HOID'
-    assert admin_fort.snow.session.get_current_user().replace('"', '') == 'SVC_HOID'
-
-
-# def test_admin_deploy_handles_secrets_error(admin_stack, mock_boto3_client):
-#     """Test that deploy handles Secrets Manager errors gracefully"""
-#     mock_boto3_client.get_secret_value.side_effect = Exception(
-#         "Secret not found")
-
-#     with pytest.raises(Exception) as exc_info:
-#         admin_stack.deploy()
-
-#     assert "Failed to get Snowflake credentials from Secrets Manager" in str(
-#         exc_info.value)
-
-
-@pytest.fixture(scope='module', autouse=True)
-def cleanup(admin_fort):
-    """Cleanup resources before and after each test"""
-    admin_fort.snow.warehouses["COSMERE_XS"].drop(True)
-    admin_fort.snow.databases["COSMERE"].drop(True)
-    admin_fort.snow.users["SVC_HOID"].drop(True)
-    admin_fort.snow.roles["HOID"].drop(True)
-
-    original = admin_fort.snow
-
-    admin_fort.deploy()
-
-    yield
-
-    # Drop resources in reverse order of creation
-    admin_fort.snow.databases["COSMERE"].drop(True)
-    admin_fort.snow.warehouses["COSMERE_XS"].drop(True)
-    admin_fort.snow.users["SVC_HOID"].drop(True)
-    original.roles["HOID"].drop(True)
+    # Parse and verify secret contents
+    secret_data = json.loads(secret_call['SecretString'])
+    assert secret_data['username'] == "SVC_HOID"
+    assert "-----BEGIN PRIVATE KEY-----" in secret_data['private_key']
+    assert "-----END PRIVATE KEY-----" in secret_data['private_key']
+    assert secret_data['role'] == "HOID"
+    assert secret_data['account'] == admin_fort.snow.session.get_current_account(
+    ).replace('"', '')
+    assert secret_data['host'] == admin_fort.snow._hostname

@@ -32,146 +32,98 @@ Dependencies:
     - cryptography: RSA key pair generation and management
 """
 
-import base64
 import boto3
-import hashlib
 import json
-from cryptography.hazmat.primitives import serialization
 from typing import Any, Dict
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+import base64
 
 from snowflake.core import Root
-from snowflake.core._common import CreateMode
-from snowflake.core.warehouse import Warehouse
-from snowflake.core.schema import Schema
-from snowflake.core.role import Role, Securable as RoleSecurable, ContainingScope as RoleContainingScope
-from snowflake.core.user import User, Securable as UserSecurable
 from snowflake.snowpark import Session
 
 from .fort import SnowFort
-from ..libs.crypt import Crypt
+from resources.warehouse import Warehouse, WarehouseConfig
+from resources.database import Database, DatabaseConfig
+from resources.role import Role, RoleConfig
+from resources.user import User, UserConfig
 
 
 class AdminFort(SnowFort):
+    """Handles core Snowflake administrative setup"""
+
+    def __init__(self, snow: Root, environment: str):
+        super().__init__(snow, environment)
+        self.warehouse_manager = Warehouse(snow, environment)
+        self.database_manager = Database(snow, environment)
+        self.role_manager = Role(snow, environment)
+        self.user_manager = User(snow, environment)
+
     def deploy(self):
-        hoid = self.snow.roles.create(role=Role(
+        """Deploys the complete admin setup"""
+        # Setup admin role
+        hoid = self.role_manager.create(RoleConfig(
             name='HOID',
-            comment='Administrative role for COSMERE'
-        ), mode=CreateMode.if_not_exists)
-
-        hoid.grant_role(role_type='ROLE', role=RoleSecurable(
-            name='SECURITYADMIN'
-        ))
-        hoid.grant_role(role_type='ROLE', role=RoleSecurable(
-            name='SYSADMIN'
+            comment='Administrative role for COSMERE',
+            granted_roles=['SECURITYADMIN', 'SYSADMIN'],
+            prefix_with_environment=False
         ))
 
-        private_key, public_key = Crypt.generate_asymmetrical_keys()
-
-        user = self.snow.users.create(user=User(
+        # Create service account with key pair
+        user, private_key = self.user_manager.create_service_account(
             name='SVC_HOID',
-            type='SERVICE',
-            default_role='HOID',
-            rsa_public_key=public_key.decode('utf-8'),
-            comment='Service account for administrative automation'
-        ), mode=CreateMode.if_not_exists)
-
-        user.grant_role(role_type='ROLE', role=UserSecurable(
-            name='HOID'
-        ))
-
-        # Add verification step
-        result = self.snow.session.sql(f"DESC USER {user.name}").collect()
-        stored_fingerprint = None
-        for row in result:
-            if row['property'] == 'RSA_PUBLIC_KEY_FP':
-                stored_fingerprint = row['value'].replace('SHA256:', '')
-                break
-
-        # Generate fingerprint from our public key using openssl equivalent
-        # openssl rsa -pubin -in public_key.pem -outform DER | openssl dgst -sha256 -binary | openssl enc -base64
-        public_key_der = serialization.load_pem_public_key(public_key).public_bytes(
-            encoding=serialization.Encoding.DER,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        generated_fingerprint = hashlib.sha256(public_key_der).digest()
-        generated_fingerprint = base64.b64encode(
-            generated_fingerprint).decode('utf-8')
-
-        if stored_fingerprint != generated_fingerprint:
-            raise ValueError(
-                "Generated key fingerprint doesn't match stored fingerprint in Snowflake")
-
-        hoid.grant_privileges(['OWNERSHIP'], 'USER', securable=RoleSecurable(
-            name='SVC_HOID'
-        ))
-
-        session = boto3.session.Session()
-        client = session.client(service_name='secretsmanager')
-
-        try:
-            secret = client.get_secret_value(SecretId='snowflake/admin')
-        except client.exceptions.ResourceNotFoundException:
-            secret = None
-
-        secret_string = json.dumps({
-            'username': user.name,
-            'private_key': private_key.decode('utf-8'),
-            'account': self.snow.session.get_current_account().replace('"', ''),
-            'host': self.snow._hostname,
-            'role': 'HOID'
-        })
-
-        if secret is None:
-            client.create_secret(
-                Name='snowflake/admin',
-                SecretString=secret_string
-            )
-        else:
-            client.put_secret_value(
-                SecretId='snowflake/admin',
-                SecretString=secret_string
-            )
-
-        # Get the secret for Snowpark session creation
-        secret = client.get_secret_value(SecretId='snowflake/admin')
-        secret_value = json.loads(secret['SecretString'])
-
-        # This returns an RSAPrivateKey object
-        private_key = Crypt.load_private_key(secret_value['private_key'])
-
-        session = Session.builder.configs({
-            "account": secret_value['account'],
-            "host": secret_value['host'],
-            "user": secret_value['username'],
-            "private_key": private_key,
-            "role": secret_value['role'],
-            # default to COMPUTE_WH if not specified
-            "warehouse": "COMPUTE_WH"
-        }).create()
-
-        self.snow = Root(session)
-
-        # Create admin warehouse
-        self.snow.warehouses.create(Warehouse(
-            name='COSMERE_XS',
-            warehouse_size='XSMALL',
-            auto_suspend=1,
-            auto_resume='true'
-            # initially_suspended='true' # TODO: fix this. Don't know why it's not working. --ndg 12/12/2024
-        ), mode=CreateMode.if_not_exists)
-
-        # Create COSMERE database
-        self.create_if_not_exists_database(
-            name='COSMERE',
-            description="Administrative database for platform management",
+            role='HOID',
+            comment='Service account for administrative automation',
+            secret_name='snowflake/admin',
             prefix_with_environment=False
         )
 
-        hoid.grant_role(role_type='ROLE', role=RoleSecurable(
-            name='COSMERE_OWNER'
+        # Create new session with service account
+        self.snow = self._create_session()
+
+        # Reinitialize managers with new session
+        self.warehouse_manager = Warehouse(self.snow, self.environment)
+        self.database_manager = Database(self.snow, self.environment)
+        self.role_manager = Role(self.snow, self.environment)
+        self.user_manager = User(self.snow, self.environment)
+
+        # Create admin warehouse
+        self.warehouse_manager.create(WarehouseConfig(
+            name='COSMERE_XS',
+            size='XSMALL',
+            auto_suspend=1,
+            auto_resume=True,
+            prefix_with_environment=False
         ))
 
-        # Create schemas
-        for schema_name in ['LOGS', 'AUDIT', 'ADMIN', 'SECURITY']:
-            self.snow.databases['COSMERE'].schemas.create(Schema(
-                name=schema_name, comment=f'{schema_name} schema'), mode=CreateMode.if_not_exists)
+        # Create admin database with schemas
+        self.database_manager.create(DatabaseConfig(
+            name='COSMERE',
+            schemas=['LOGS', 'AUDIT', 'ADMIN', 'SECURITY'],
+            comment='Administrative database for platform management',
+            prefix_with_environment=False
+        ))
+
+        # Grant COSMERE_OWNER role to HOID
+        self.role_manager.grant_role('HOID', 'COSMERE_OWNER')
+
+    def _create_session(self) -> Root:
+        """Creates a new Snowflake session using stored credentials"""
+        session = boto3.session.Session()
+        client = session.client(service_name='secretsmanager')
+        secret = client.get_secret_value(SecretId='snowflake/admin')
+        secret_value = json.loads(secret['SecretString'])
+
+        # Create session config
+        session_config = {
+            "account": secret_value['account'],
+            "host": secret_value['host'],
+            "user": secret_value['username'],
+            "private_key": secret_value['private_key'],
+            "role": secret_value['role'],
+            "warehouse": "COMPUTE_WH"  # Default warehouse
+        }
+
+        # Create and return session
+        snowpark_session = Session.builder.configs(session_config).create()
+        return Root(snowpark_session)

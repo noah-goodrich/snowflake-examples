@@ -8,28 +8,36 @@ from snowflake.core.database_role import DatabaseRole, ContainingScope as Databa
 from snowflake.core.role import Role, ContainingScope as RoleContainingScope, Securable as RoleSecurable
 from snowflake.core.warehouse import Warehouse
 import os
+from resources.warehouse import Warehouse as ResourceWarehouse
+from resources.database import Database as ResourceDatabase
+from resources.role import Role as ResourceRole
+from resources.user import User as ResourceUser
 
 
-class SnowFort():
+class SnowFort:
+    """Base class for Snowflake infrastructure management"""
 
-    def __init__(self, snow: Root, environment: str = None, botocore_session: boto3.Session = None) -> None:
-        # Get environment from env var if not provided
-        self.env = (type(environment) == str and environment.lower()) \
-            or os.getenv('SNOWFLAKE_ENV', 'dev').lower()
-        if self.env not in ['dev', 'stg', 'prd']:
-            raise ValueError(f"Invalid environment: {self.environment}")
+    def __init__(self, snow: Root, environment: str):
+        """Initialize a new SnowFort instance.
 
-        # Initialize properties
+        Args:
+            snow: Authenticated Snowflake connection
+            environment: Environment name (e.g. dev, prod)
+        """
         self.snow = snow
-        self.boto = botocore_session or boto3.session.Session()
+        self.environment = environment
+        self.warehouse_manager = ResourceWarehouse(snow, environment)
+        self.database_manager = ResourceDatabase(snow, environment)
+        self.role_manager = ResourceRole(snow, environment)
+        self.user_manager = ResourceUser(snow, environment)
 
     def get_secret(self, secret_name: str) -> Dict[str, Any]:
         """Get secret from AWS Secrets Manager"""
-        client = self.boto.client(service_name='secretsmanager')
+        client = boto3.session.Session().client(service_name='secretsmanager')
         try:
             return client.get_secret_value(SecretId=secret_name)
-        except ClientError as e:
-            raise Exception(f"Failed to get secret {secret_name}: {e}")
+        except client.exceptions.ResourceNotFoundException:
+            raise ValueError(f"Secret {secret_name} not found")
 
     def create_if_not_exists_database(self, name: str, description: str, prefix_with_environment: bool = True) -> 'SnowStack':
         """Create or alter a database with the given configuration.
@@ -39,7 +47,7 @@ class SnowFort():
             prefix_with_environment: Whether to prefix the database name with the environment
         """
         if prefix_with_environment:
-            db = f"{self.env}_{name}"
+            db = f"{self.environment}_{name}"
         else:
             db = name
 
@@ -126,7 +134,7 @@ class SnowFort():
         del config['prefix_with_environment']
 
         if prefix:
-            config['name'] = f"{self.env}_{db.lower()}_{size.lower()}"
+            config['name'] = f"{self.environment}_{db.lower()}_{size.lower()}"
         else:
             config['name'] = f"{db.lower()}_{size.lower()}"
 
@@ -195,6 +203,10 @@ class SnowFort():
         pass
 
     def deploy(self):
-        """Deploy all resources defined in the stack"""
+        """Deploy the infrastructure stack.
+
+        This method should be overridden by subclasses to implement
+        their specific deployment logic.
+        """
         raise NotImplementedError(
-            "Deploy method needs to be defined in an implementing class")
+            "Subclasses must implement deploy() method")

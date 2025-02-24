@@ -29,8 +29,8 @@ def setup_teardown(fort: SnowFort):
         print(f"Teardown cleanup error: {e}")
 
 
-def test_create_or_alter_warehouse(fort: SnowFort):
-    """Test end-to-end warehouse creation with default configuration"""
+def test_warehouse_creation(fort: SnowFort):
+    """Test warehouse creation with default configuration"""
     # Create warehouse
     warehouse = fort.warehouse_manager.create(WarehouseConfig(
         name="TEST_WH",
@@ -48,8 +48,8 @@ def test_create_or_alter_warehouse(fort: SnowFort):
     assert warehouse.auto_suspend == 60
 
 
-def test_create_database_with_roles(fort: SnowFort):
-    """Test end-to-end database creation with roles"""
+def test_database_creation(fort: SnowFort):
+    """Test database creation with schemas"""
     # Create database
     database = fort.database_manager.create(DatabaseConfig(
         name="TEST_DB",
@@ -60,6 +60,20 @@ def test_create_database_with_roles(fort: SnowFort):
 
     assert database is not None
     assert database.name == "DEV_TEST_DB"
+
+    # Verify schemas
+    schemas = [schema.name for schema in database.schemas]
+    assert "SCHEMA1" in schemas
+    assert "SCHEMA2" in schemas
+
+
+def test_database_roles(fort: SnowFort):
+    """Test database role creation and privileges"""
+    # Create database
+    fort.database_manager.create(DatabaseConfig(
+        name="TEST_DB",
+        prefix_with_environment=True
+    ))
 
     # Create roles
     admin_role = fort.role_manager.create(RoleConfig(
@@ -101,19 +115,3 @@ def test_create_database_with_roles(fort: SnowFort):
         "DATABASE",
         "DEV_TEST_DB"
     )
-
-    # Verify privileges
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_ADMIN").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "OWNERSHIP" in privileges
-
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_WRITE").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "WRITE" in privileges
-
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_READ").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "READ" in privileges

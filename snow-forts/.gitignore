@@ -6,6 +6,10 @@ __pycache__
 *.egg-info
 node_modules
 
+# Coverage reports
+.coverage
+tests/coverage/
+
 # CDK asset staging directory
 .cdk.staging
 cdk.out
