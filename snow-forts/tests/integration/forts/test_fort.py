@@ -102,18 +102,20 @@ def test_create_database_with_roles(fort: SnowFort):
         "DEV_TEST_DB"
     )
 
-    # Verify privileges
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_ADMIN").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "OWNERSHIP" in privileges
+    # Get all SQL calls for debugging
+    sql_calls = [call[0][0] for call in fort.snow.session.sql.call_args_list]
+    print("\nActual SQL calls:")
+    for call in sql_calls:
+        print(f"  {call}")
 
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_WRITE").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "WRITE" in privileges
+    # Verify SQL calls for privilege grants
+    expected_grants = [
+        "GRANT OWNERSHIP ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_ADMIN",
+        "GRANT WRITE ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_WRITE",
+        "GRANT READ ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_READ"
+    ]
 
-    grants = fort.snow.session.sql(
-        "SHOW GRANTS TO ROLE DEV_TEST_DB_READ").collect()
-    privileges = [row['privilege'] for row in grants]
-    assert "READ" in privileges
+    for expected_grant in expected_grants:
+        assert any(
+            expected_grant in call for call in sql_calls
+        ), f"Grant not found in SQL calls: {expected_grant}"

@@ -70,7 +70,7 @@ class AdminFort(SnowFort):
         ))
 
         # Create service account with key pair
-        user, private_key = self.user_manager.create_service_account(
+        user, secret_name = self.user_manager.create_service_account(
             name='SVC_HOID',
             role='HOID',
             comment='Service account for administrative automation',

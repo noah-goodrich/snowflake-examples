@@ -119,8 +119,13 @@ def test_warehouse_drop(snow):
     """Test warehouse drop operation"""
     # Setup mock warehouse
     mock_warehouse = MagicMock()
+    mock_warehouse.name = "DEV_TEST_WH"
+    mock_warehouse.warehouse_size = "XSMALL"
+    mock_warehouse.auto_suspend = 60
+    mock_warehouse.auto_resume = "true"
     mock_warehouse.drop = MagicMock()
 
+    # Set up the mock to be returned by both create and get
     snow.warehouses.__getitem__.return_value = mock_warehouse
     snow.warehouses.create.return_value = mock_warehouse
 
@@ -128,11 +133,13 @@ def test_warehouse_drop(snow):
 
     # Create warehouse
     config = WarehouseConfig(name="TEST_WH")
-    warehouse.create(config)
+    created_wh = warehouse.create(config)
 
     # Drop warehouse
     warehouse.drop("TEST_WH")
-    mock_warehouse.drop.assert_called_once_with(cascade=True)
+
+    # Verify drop was called with cascade=True
+    created_wh.drop.assert_called_once_with(cascade=True)
 
     # Test get after drop
     snow.warehouses.__getitem__.side_effect = KeyError()

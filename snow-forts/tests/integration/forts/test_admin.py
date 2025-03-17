@@ -7,9 +7,13 @@ from resources.warehouse import WarehouseConfig
 from resources.database import DatabaseConfig
 from resources.role import RoleConfig
 from resources.user import UserConfig
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.backends import default_backend
+import base64
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def admin_fort(snow) -> AdminFort:
     """Create a fresh Admin stack instance for each test"""
     return AdminFort(snow=snow, environment="dev")
@@ -24,16 +28,7 @@ def mock_boto3_client():
         yield mock_client
 
 
-@pytest.fixture
-def mock_snowpark_session():
-    """Mock Snowpark session"""
-    with patch('snowflake.snowpark.Session') as mock_session:
-        mock_builder = MagicMock()
-        mock_session.builder.configs.return_value = mock_builder
-        yield mock_session
-
-
-@pytest.fixture(scope='module', autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def cleanup(admin_fort):
     """Cleanup resources before and after each test"""
     try:
@@ -42,7 +37,7 @@ def cleanup(admin_fort):
         admin_fort.role_manager.drop("HOID", cascade=True)
         admin_fort.user_manager.drop("SVC_HOID")
     except Exception as e:
-        print(f"Cleanup error: {e}")
+        print(f"Setup cleanup error: {e}")
 
     yield
 
@@ -125,13 +120,13 @@ def test_svc_hoid_user_creation(admin_fort, mock_boto3_client):
     }
 
     # Create service account
-    user = admin_fort.user_manager.create(UserConfig(
+    user, secret_name = admin_fort.user_manager.create_service_account(
         name='SVC_HOID',
-        default_role='HOID',
-        rsa_public_key="TEST_KEY",
+        role='HOID',
         comment='Service account for administrative automation',
+        secret_name='snowflake/admin',
         prefix_with_environment=False
-    ))
+    )
 
     # Verify user exists
     assert user is not None
@@ -141,19 +136,53 @@ def test_svc_hoid_user_creation(admin_fort, mock_boto3_client):
 
 def test_complete_admin_deployment(admin_fort, mock_boto3_client):
     """Test end-to-end admin deployment"""
+    # Generate a test RSA key pair for mocking
+    private_key = rsa.generate_private_key(
+        public_exponent=65537,
+        key_size=2048,
+        backend=default_backend()
+    )
+
+    # Get private key in PEM format
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    ).decode('utf-8')
+
+    # Get public key in PEM format
+    public_key_pem = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
     # Mock AWS Secrets Manager for storing credentials
-    stored_secret = None
+    stored_secret = json.dumps({
+        "username": "SVC_HOID",
+        "private_key": private_key_pem,  # Store as PEM string
+        "role": "HOID",
+        "account": "test-account",
+        "host": "test-account.snowflakecomputing.com"
+    })
+
+    # Mock the secret not existing initially, then existing after creation
+    mock_boto3_client.exceptions.ResourceNotFoundException = Exception
+    secret_exists = False
+
+    def mock_get_secret(**kwargs):
+        nonlocal secret_exists
+        if not secret_exists:
+            raise mock_boto3_client.exceptions.ResourceNotFoundException()
+        return {'SecretString': stored_secret}
 
     def mock_create_secret(**kwargs):
-        nonlocal stored_secret
+        nonlocal secret_exists, stored_secret
+        secret_exists = True
         stored_secret = kwargs['SecretString']
         return {'ARN': 'test-arn', 'Name': kwargs['Name']}
 
-    def mock_get_secret(**kwargs):
-        return {'SecretString': stored_secret}
-
-    mock_boto3_client.create_secret.side_effect = mock_create_secret
     mock_boto3_client.get_secret_value.side_effect = mock_get_secret
+    mock_boto3_client.create_secret.side_effect = mock_create_secret
 
     # Deploy everything
     admin_fort.deploy()
