@@ -1,25 +1,57 @@
+"""Medallion Stack for Snowflake Infrastructure Management
+
+This stack handles the creation and configuration of medallion architecture components
+in Snowflake, including:
+- Bronze, Silver, and Gold layer databases and schemas
+- Warehouse provisioning for each layer
+- Role-based access control for each layer
+- Service account setup with RSA key pair authentication
+- AWS Secrets Manager integration for credential management
+
+The stack implements security best practices including:
+- Key pair verification using SHA256 fingerprint comparison
+- Least privilege access through role assignments
+- Automated secret creation
+- RSA key pair authentication for enhanced security
+
+Key pair authentication implementation follows Snowflake's recommended practices:
+- Uses PKCS#8 format for private keys
+- Implements fingerprint verification
+- Supports key rotation capabilities
+- Stores credentials securely in AWS Secrets Manager
+
+References:
+- Snowflake Key Pair Authentication Guide: https://docs.snowflake.com/en/user-guide/key-pair-auth
+- SELECT Developer Guide for Key Pair Setup: https://select.dev/docs/snowflake-developer-guide/snowflake-key-pair
+
+Dependencies:
+    - boto3: AWS SDK for Secrets Manager interaction
+    - snowflake.core: Core Snowflake infrastructure management
+    - snowflake.snowpark: Snowflake session management
+    - cryptography: RSA key pair generation and management
 """
-Medallion Architecture Stack for Snowflake Data Platform
 
-This stack implements the medallion architecture with four core databases:
-- BRONZE: Raw data landing zone
-- SILVER: Standardized and cleansed data
-- GOLD: Business-ready aggregates and metrics
-- PLATINUM: ML-ready features and model artifacts
+import boto3
+import json
+from typing import Any, Dict, Optional
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+import base64
 
-Each database includes:
-- Multiple warehouses of different sizes (X-SMALL through 3X-LARGE)
-- Database roles (OWNER, RW, RO)
-- Standard schemas based on purpose
-"""
-
-from typing import List
 from snowflake.core import Root
-from snowflake.core._common import CreateMode
-from snowflake.core.warehouse import Warehouse
-from snowflake.core.schema import Schema
+from snowflake.snowpark import Session
 
-from .fort import SnowFort
+from .snow import SnowFort
+from specs.warehouse import WarehouseSpec
+from specs.database import DatabaseSpec
+from specs.role import RoleSpec
+from specs.user import UserSpec
+from state_managers.types import StateChangeMetadata
+from state_managers.warehouse import WarehouseStateManager
+from state_managers.database import DatabaseStateManager
+from state_managers.role import RoleStateManager
+from state_managers.user import UserStateManager
+from aws.secrets import SecretsManager
 
 
 class MedallionFort(SnowFort):

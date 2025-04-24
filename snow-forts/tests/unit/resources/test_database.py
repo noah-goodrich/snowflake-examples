@@ -1,156 +1,191 @@
+"""Tests for database resource."""
+
 import pytest
 from unittest.mock import MagicMock, patch
-from resources.database import Database, DatabaseConfig
-from snowflake.core._common import CreateMode
+
+from snowflake.core import Root
 from snowflake.core.database import Database as SnowflakeDatabase
-from snowflake.core.schema import Schema
+from resources.database import Database, DatabaseConfig
 
 
-def test_database_config_validation():
-    """Test database configuration validation"""
-    # Test valid configuration
+@patch('snowflake.core.Root')
+def test_database_create(mock_root):
+    """Test database creation"""
+    # Setup mock database
+    mock_db = MagicMock(spec=SnowflakeDatabase)
+    mock_db.name = "DEV_TEST_DB"
+    mock_db.comment = "Test database"
+
+    # Setup mock databases collection
+    mock_dbs = MagicMock()
+    mock_dbs.create.return_value = mock_db
+
+    # Setup mock root
+    mock_root.databases = mock_dbs
+
+    # Create database
     config = DatabaseConfig(
         name="TEST_DB",
-        schemas=["SCHEMA1", "SCHEMA2"],
         comment="Test database"
     )
-    config.validate()  # Should not raise
-
-    # Test empty name
-    with pytest.raises(ValueError, match="Database name cannot be empty"):
-        DatabaseConfig(name="").validate()
-
-    # Test empty schema name
-    with pytest.raises(ValueError, match="Schema names cannot be empty"):
-        DatabaseConfig(name="TEST_DB", schemas=["SCHEMA1", ""]).validate()
-
-
-def test_database_name_formatting(snow):
-    """Test database name formatting with environment prefix"""
-    database = Database(snow, "DEV")
-
-    # Test with environment prefix
-    config = DatabaseConfig(name="TEST_DB", prefix_with_environment=True)
-    assert database._format_name(config.name, True) == "DEV_TEST_DB"
-
-    # Test without environment prefix
-    config = DatabaseConfig(name="TEST_DB", prefix_with_environment=False)
-    assert database._format_name(config.name, False) == "TEST_DB"
-
-
-def test_database_creation():
-    """Test database creation with different modes"""
-    # Create a complete mock snow object
-    snow = MagicMock()
-    mock_database = MagicMock()
-    mock_schemas = MagicMock()
-    mock_schemas.create.return_value = MagicMock()
-    mock_database.schemas = mock_schemas
-    mock_database.drop = MagicMock()
-
-    # Setup the databases collection on snow
-    mock_databases = MagicMock()
-    mock_databases.create.return_value = mock_database
-    snow.databases = mock_databases
-
-    database = Database(snow, "DEV")
-    config = DatabaseConfig(
-        name="TEST_DB",
-        schemas=["SCHEMA1", "SCHEMA2"],
-        comment="Test database"
+    database = Database(mock_root, "DEV", config)
+    db = database.create()
+    assert db.comment == "Test database"
+    mock_dbs.create.assert_called_once_with(
+        "DEV_TEST_DB",
+        comment="Test database",
+        data_retention_time_in_days=None
     )
 
-    # Test creation
-    db = database.create(config, mode=CreateMode.if_not_exists)
 
-    # Verify the create call
-    mock_databases.create.assert_called_once()
-    create_args = mock_databases.create.call_args[0][0]
-    assert create_args.name == "DEV_TEST_DB"
-    assert create_args.comment == "Test database"
-
-    # Verify schema creation calls
-    assert mock_schemas.create.call_count == 2
-    schema_calls = mock_schemas.create.call_args_list
-    assert schema_calls[0][0][0].name == "SCHEMA1"
-    assert schema_calls[1][0][0].name == "SCHEMA2"
-
-
-def test_database_alter(snow):
+@patch('snowflake.core.Root')
+def test_database_alter(mock_root):
     """Test database alteration"""
-    # Setup mocks
-    mock_database = MagicMock()
-    mock_database.schemas = MagicMock()
-    mock_database.schemas.create.return_value = MagicMock()
-    mock_database.drop = MagicMock()
+    # Setup mock database
+    mock_db = MagicMock(spec=SnowflakeDatabase)
+    mock_db.name = "DEV_TEST_DB"
+    mock_db.comment = "Initial comment"
 
-    snow.databases.create.return_value = mock_database
-    snow.databases.__getitem__.return_value = mock_database
+    # Setup mock databases collection
+    mock_dbs = MagicMock()
+    mock_dbs.create.return_value = mock_db
+    mock_dbs.__getitem__.return_value = mock_db
+    mock_dbs.alter.return_value = mock_db
 
-    database = Database(snow, "DEV")
+    # Setup mock root
+    mock_root.databases = mock_dbs
 
     # Create initial database
-    config = DatabaseConfig(name="TEST_DB", comment="Initial comment")
-    db = database.create(config)
-
-    # Reset mock to verify alter call
-    snow.databases.create.reset_mock()
+    config = DatabaseConfig(
+        name="TEST_DB",
+        comment="Initial comment"
+    )
+    database = Database(mock_root, "DEV", config)
+    db = database.create()
+    assert db.comment == "Initial comment"
 
     # Alter database
     new_config = DatabaseConfig(
         name="TEST_DB",
-        comment="Updated comment",
-        schemas=["NEW_SCHEMA"]
+        comment="Updated comment"
     )
-    altered_db = database.alter("TEST_DB", new_config)
+    mock_db.comment = "Updated comment"
+    altered_db = database.alter(new_config)
+    assert altered_db.comment == "Updated comment"
+    mock_dbs.alter.assert_called_once_with(
+        "DEV_TEST_DB",
+        comment="Updated comment",
+        data_retention_time_in_days=None
+    )
 
-    # Verify the alter call
-    snow.databases.create.assert_called_once()
-    alter_args = snow.databases.create.call_args[0][0]
-    assert alter_args.name == "DEV_TEST_DB"
-    assert alter_args.comment == "Updated comment"
 
-
-def test_database_drop(snow):
+@patch('snowflake.core.Root')
+def test_database_drop(mock_root):
     """Test database drop operation"""
-    # Setup mocks
-    mock_database = MagicMock()
-    mock_database.drop = MagicMock()
-    snow.databases.__getitem__.return_value = mock_database
+    # Setup mock database
+    mock_db = MagicMock(spec=SnowflakeDatabase)
+    mock_db.name = "DEV_TEST_DB"
+    mock_db.drop = MagicMock()
 
-    database = Database(snow, "DEV")
+    # Setup mock databases collection
+    mock_dbs = MagicMock()
+    mock_dbs.create.return_value = mock_db
+    mock_dbs.__getitem__.return_value = mock_db
+
+    # Setup mock root
+    mock_root.databases = mock_dbs
+
+    # Create database
+    config = DatabaseConfig(name="TEST_DB")
+    database = Database(mock_root, "DEV", config)
+    db = database.create()
 
     # Drop database
-    database.drop("TEST_DB")
-
-    # Verify drop was called
-    mock_database.drop.assert_called_once_with(cascade=True)
+    database.drop(cascade=True)
+    mock_dbs.drop.assert_called_once_with("DEV_TEST_DB", cascade=True)
 
 
-def test_schema_operations(snow):
-    """Test schema creation and drop operations"""
-    # Setup mocks
-    mock_database = MagicMock()
-    mock_schema = MagicMock()
-    mock_schema.drop = MagicMock()
-    mock_database.schemas = MagicMock()
-    mock_database.schemas.create.return_value = mock_schema
-    mock_database.schemas.__getitem__.return_value = mock_schema
+@patch('snowflake.core.Root')
+def test_database_get(mock_root):
+    """Test database retrieval"""
+    # Setup mock database
+    mock_db = MagicMock(spec=SnowflakeDatabase)
+    mock_db.name = "DEV_TEST_DB"
 
-    snow.databases.__getitem__.return_value = mock_database
+    # Setup mock databases collection
+    mock_dbs = MagicMock()
+    mock_dbs.__getitem__.return_value = mock_db
 
-    database = Database(snow, "DEV")
+    # Setup mock root
+    mock_root.databases = mock_dbs
 
-    # Create schema
-    schema = database.create_schema("TEST_DB", "TEST_SCHEMA")
+    # Test get existing database
+    config = DatabaseConfig(name="TEST_DB")
+    database = Database(mock_root, "DEV", config)
+    db = database.get()
+    assert db == mock_db
+    mock_dbs.__getitem__.assert_called_once_with("DEV_TEST_DB")
 
-    # Verify schema creation
-    mock_database.schemas.create.assert_called_once()
-    schema_args = mock_database.schemas.create.call_args[0][0]
-    assert schema_args.name == "TEST_SCHEMA"
 
-    # Drop schema
-    database.drop_schema("TEST_DB", "TEST_SCHEMA", cascade=True)
+@patch('snowflake.core.Root')
+def test_database_exists(mock_root):
+    """Test database existence check"""
+    # Setup mock databases collection
+    mock_dbs = MagicMock()
+    mock_dbs.__getitem__.return_value = MagicMock()
 
-    # Verify schema drop
-    mock_schema.drop.assert_called_once_with(cascade=True)
+    # Setup mock root
+    mock_root.databases = mock_dbs
+
+    # Test existing database
+    config = DatabaseConfig(name="TEST_DB")
+    database = Database(mock_root, "DEV", config)
+    assert database.exists() is True
+    mock_dbs.__getitem__.assert_called_once_with("DEV_TEST_DB")
+
+
+def test_database_config_validation():
+    """Test database configuration validation"""
+    # Test valid config
+    config = DatabaseConfig(name="TEST_DB")
+    config.validate()  # Should not raise
+
+    # Test invalid config
+    with pytest.raises(ValueError):
+        DatabaseConfig(name="").validate()
+
+
+@patch('snowflake.core.Root')
+def test_database_name_formatting(mock_root):
+    """Test database name formatting with environment prefix"""
+    # Test with environment prefix
+    config = DatabaseConfig(
+        name="TEST_DB",
+        prefix_with_environment=True
+    )
+    database = Database(mock_root, "DEV", config)
+    assert database._name == "DEV_TEST_DB"
+
+    # Test without environment prefix
+    config = DatabaseConfig(
+        name="TEST_DB",
+        prefix_with_environment=False
+    )
+    database = Database(mock_root, "DEV", config)
+    assert database._name == "TEST_DB"
+
+    # Test lowercase conversion
+    config = DatabaseConfig(
+        name="test_db",
+        prefix_with_environment=True
+    )
+    database = Database(mock_root, "DEV", config)
+    assert database._name == "DEV_TEST_DB"
+
+    # Test mixed case handling
+    config = DatabaseConfig(
+        name="Test_Db",
+        prefix_with_environment=True
+    )
+    database = Database(mock_root, "DEV", config)
+    assert database._name == "DEV_TEST_DB"

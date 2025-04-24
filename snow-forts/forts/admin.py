@@ -34,7 +34,7 @@ Dependencies:
 
 import boto3
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 import base64
@@ -42,70 +42,69 @@ import base64
 from snowflake.core import Root
 from snowflake.snowpark import Session
 
-from .fort import SnowFort
-from resources.warehouse import Warehouse, WarehouseConfig
-from resources.database import Database, DatabaseConfig
-from resources.role import Role, RoleConfig
-from resources.user import User, UserConfig
+from .snow import SnowFort
+from specs.warehouse import WarehouseSpec
+from specs.database import DatabaseSpec
+from specs.role import RoleSpec
+from specs.user import UserSpec
+from state_managers.types import StateChangeMetadata
+from state_managers.warehouse import WarehouseStateManager
+from state_managers.database import DatabaseStateManager
+from state_managers.role import RoleStateManager
+from state_managers.user import UserStateManager
+from aws.secrets import SecretsManager
 
 
 class AdminFort(SnowFort):
     """Handles core Snowflake administrative setup"""
 
-    def __init__(self, snow: Root, environment: str):
-        super().__init__(snow, environment)
-        self.warehouse_manager = Warehouse(snow, environment)
-        self.database_manager = Database(snow, environment)
-        self.role_manager = Role(snow, environment)
-        self.user_manager = User(snow, environment)
-
     def deploy(self):
         """Deploys the complete admin setup"""
         # Setup admin role
-        hoid = self.role_manager.create(RoleConfig(
+        role_spec = RoleSpec(
             name='HOID',
             comment='Administrative role for COSMERE',
             granted_roles=['SECURITYADMIN', 'SYSADMIN'],
             prefix_with_environment=False
-        ))
+        )
+        self.role_state.apply(role_spec)
 
         # Create service account with key pair
-        user, secret_name = self.user_manager.create_service_account(
+        user_spec = UserSpec(
             name='SVC_HOID',
             role='HOID',
             comment='Service account for administrative automation',
             secret_name='snowflake/admin',
             prefix_with_environment=False
         )
+        self.user_state.apply(user_spec)
 
-        # Create new session with service account
-        self.snow = self._create_session()
-
-        # Reinitialize managers with new session
-        self.warehouse_manager = Warehouse(self.snow, self.environment)
-        self.database_manager = Database(self.snow, self.environment)
-        self.role_manager = Role(self.snow, self.environment)
-        self.user_manager = User(self.snow, self.environment)
-
-        # Create admin warehouse
-        self.warehouse_manager.create(WarehouseConfig(
+        # Define and apply warehouse state
+        warehouse_spec = WarehouseSpec(
             name='COSMERE_XS',
             size='XSMALL',
             auto_suspend=1,
             auto_resume=True,
             prefix_with_environment=False
-        ))
+        )
+        self.warehouse_state.apply(warehouse_spec)
 
-        # Create admin database with schemas
-        self.database_manager.create(DatabaseConfig(
+        # Define and apply database state
+        database_spec = DatabaseSpec(
             name='COSMERE',
             schemas=['LOGS', 'AUDIT', 'ADMIN', 'SECURITY'],
             comment='Administrative database for platform management',
             prefix_with_environment=False
-        ))
+        )
+        self.database_state.apply(database_spec)
 
-        # Grant COSMERE_OWNER role to HOID
-        self.role_manager.grant_role('HOID', 'COSMERE_OWNER')
+        # Grant COSMERE_OWNER role to HOID through role state manager
+        role_grant_spec = RoleSpec(
+            name='COSMERE_OWNER',
+            granted_to=['HOID'],
+            prefix_with_environment=False
+        )
+        self.role_state.apply(role_grant_spec)
 
     def _create_session(self) -> Root:
         """Creates a new Snowflake session using stored credentials"""

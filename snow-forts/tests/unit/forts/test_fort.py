@@ -1,12 +1,28 @@
+"""Unit tests for SnowFort base class."""
+
 import pytest
+from unittest.mock import Mock, patch
 from forts.fort import SnowFort
 from resources.warehouse import WarehouseConfig
 from resources.database import DatabaseConfig
 from resources.role import RoleConfig
+from aws.secrets import SecretsManager
+
+
+@pytest.fixture
+def mock_secrets_manager():
+    """Create a mock SecretsManager."""
+    return Mock(spec=SecretsManager)
+
+
+@pytest.fixture
+def fort(snow, mock_secrets_manager):
+    """Create a SnowFort instance with mocked dependencies."""
+    return SnowFort(snow=snow, environment="dev", secrets_manager=mock_secrets_manager)
 
 
 @pytest.fixture(scope="function")
-def fort(snow) -> SnowFort:
+def fort_without_mock(snow) -> SnowFort:
     """Create a fresh SnowStack instance for each test"""
     return SnowFort(snow=snow, environment="dev")
 
@@ -115,3 +131,33 @@ def test_database_roles(fort: SnowFort):
         "DATABASE",
         "DEV_TEST_DB"
     )
+
+
+def test_get_secret(fort, mock_secrets_manager):
+    """Test secret retrieval from AWS Secrets Manager."""
+    # Setup mock return value
+    expected_secret = {
+        "SecretString": '{"username": "test", "password": "secret"}'}
+    mock_secrets_manager.get_secret.return_value = expected_secret
+
+    # Call method and verify
+    result = fort.get_secret("test-secret")
+    assert result == expected_secret
+    mock_secrets_manager.get_secret.assert_called_once_with("test-secret")
+
+
+def test_get_secret_not_found(fort, mock_secrets_manager):
+    """Test handling of non-existent secrets."""
+    # Setup mock to raise ValueError
+    mock_secrets_manager.get_secret.side_effect = ValueError(
+        "Secret test-secret not found")
+
+    # Verify exception is propagated
+    with pytest.raises(ValueError, match="Secret test-secret not found"):
+        fort.get_secret("test-secret")
+
+
+def test_default_secrets_manager():
+    """Test that default SecretsManager is created if none provided."""
+    fort = SnowFort(snow=Mock(), environment="dev")
+    assert isinstance(fort.secrets_manager, SecretsManager)

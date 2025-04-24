@@ -1,11 +1,47 @@
 import argparse
 import boto3
 import json
+import logging
 from snowflake.snowpark import Session
 from snowflake.core import Root
+from botocore.exceptions import ClientError
 
 from forts.admin import AdminFort
 from forts.medallion import MedallionFort
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+def verify_secret_exists(secret_name: str) -> bool:
+    """Verify that the specified secret exists in AWS Secrets Manager"""
+    session = boto3.session.Session()
+    client = session.client('secretsmanager')
+
+    try:
+        client.describe_secret(SecretId=secret_name)
+        return True
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            logger.error(
+                f"Secret '{secret_name}' not found in AWS Secrets Manager")
+            logger.error(
+                "Please ensure the secret is created with the following structure:")
+            logger.error("""
+{
+    "account": "your-account",
+    "host": "your-host",
+    "username": "your-username",
+    "private_key": "your-private-key",
+    "role": "your-role"
+}
+""")
+            return False
+        raise
 
 
 def get_snowflake_session(secret_name: str) -> Session:
@@ -26,7 +62,8 @@ def get_snowflake_session(secret_name: str) -> Session:
             "warehouse": "COMPUTE_WH"  # Default warehouse
         }).create()
     except Exception as e:
-        raise Exception(f"Failed to get Snowflake credentials: {str(e)}")
+        logger.error(f"Failed to get Snowflake credentials: {str(e)}")
+        raise
 
 
 def main():
@@ -38,30 +75,35 @@ def main():
                         help='Fort to deploy')
     args = parser.parse_args()
 
+    # Verify secret exists
+    secret_name = 'snowflake/accountadmin'
+    if not verify_secret_exists(secret_name):
+        return 1
+
     # Create Snowflake session
     try:
-        session = get_snowflake_session('snowflake/accountadmin')
+        session = get_snowflake_session(secret_name)
         snow = Root(session)
     except Exception as e:
-        print(f"Failed to initialize Snowflake session: {str(e)}")
+        logger.error(f"Failed to initialize Snowflake session: {str(e)}")
         return 1
 
     # Deploy stacks
     try:
         if args.fort in ['admin', 'all']:
-            print(f"Deploying Admin stack to {args.env}...")
+            logger.info(f"Deploying Admin stack to {args.env}...")
             admin = AdminFort(snow=snow, environment=args.env)
             admin.deploy()
-            print("Admin stack deployed successfully")
+            logger.info("Admin stack deployed successfully")
 
         if args.fort in ['medallion', 'all']:
-            print(f"Deploying Medallion stack to {args.env}...")
+            logger.info(f"Deploying Medallion stack to {args.env}...")
             medallion = MedallionFort(snow=snow, environment=args.env)
             medallion.deploy()
-            print("Medallion stack deployed successfully")
+            logger.info("Medallion stack deployed successfully")
 
     except Exception as e:
-        print(f"Deployment failed: {str(e)}")
+        logger.error(f"Deployment failed: {str(e)}")
         return 1
 
     return 0

@@ -1,9 +1,31 @@
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 from snowflake.core import Root
+from snowflake.core.database import Database as SnowflakeDatabase
 from snowflake.snowpark import Session
 import boto3
 from moto import mock_aws
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+
+def pytest_addoption(parser):
+    """Add custom command line options."""
+    parser.addoption(
+        "--e2e",
+        action="store_true",
+        default=False,
+        help="Run end-to-end tests"
+    )
+
+
+def pytest_configure(config):
+    """Configure pytest."""
+    if not config.option.e2e:
+        setattr(config.option, 'markexpr', 'not e2e')
 
 
 @pytest.fixture(scope="function")
@@ -252,13 +274,31 @@ def iam(aws_credentials):
 
 
 @pytest.fixture(scope="function")
-def mock_boto3_client(aws_credentials):
-    """Mock AWS Secrets Manager client"""
-    with mock_aws():
-        # Create a real boto3 client that uses moto's mock backend
-        client = boto3.client('secretsmanager')
+def mock_boto3_client():
+    """Create a mock boto3 client for testing"""
+    mock_client = MagicMock()
+    mock_client.get_secret_value.return_value = {
+        'SecretString': '{"account": "test", "host": "test", "username": "test", "private_key": "test", "role": "test"}'
+    }
+    return mock_client
 
-        # Patch boto3.session.Session to return our mocked client
-        with patch('boto3.session.Session') as mock_session:
-            mock_session.return_value.client.return_value = client
-            yield client
+
+@pytest.fixture(scope="function")
+def mock_boto3_session(mock_boto3_client):
+    """Create a mock boto3 session for testing"""
+    mock_session = MagicMock()
+    mock_session.client.return_value = mock_boto3_client
+    return mock_session
+
+
+@pytest.fixture
+def mock_database():
+    """Create a mock Database instance."""
+    database = MagicMock(spec=SnowflakeDatabase)
+    database.name = "TEST_DB"
+    database.comment = "Test database"
+    database.exists = MagicMock()
+    database.create = MagicMock()
+    database.alter = MagicMock()
+    database.drop = MagicMock()
+    return database
