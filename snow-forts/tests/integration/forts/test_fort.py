@@ -1,143 +1,121 @@
 import pytest
-from ....forts.fort import SnowFort
-from aws_cdk import App
+from forts.fort import SnowFort
+from resources.warehouse import WarehouseConfig
+from resources.database import DatabaseConfig
+from resources.role import RoleConfig
 
 
 @pytest.fixture(scope="function")
 def fort(snow) -> SnowFort:
     """Create a fresh SnowStack instance for each test"""
-    stack = SnowFort(snow=snow, environment="dev")
-    return stack
-
-
-def test_create_or_alter_warehouse_no_overrides(fort: SnowFort):
-    """Test warehouse creation with different sizes and environments"""
-    # Test basic warehouse creation
-    fort.create_or_alter_warehouse("TEST_DB", "XSMALL")
-
-    # Verify warehouse exists with correct properties
-    wh_name = "dev_test_db_xsmall"
-    wh = fort.snow.warehouses[wh_name].fetch()
-    assert wh is not None
-    assert wh.name == wh_name.upper()
-    assert wh.warehouse_size == "X-Small"
-
-
-def test_create_or_alter_warehouse_with_overrides(fort: SnowFort):
-    # Test warehouse with custom properties
-    custom_config = {
-        "auto_suspend": 300,
-        "min_cluster_count": 2,
-        "max_cluster_count": 3,
-        "prefix_with_environment": False
-    }
-    fort.create_or_alter_warehouse(
-        "TEST_DB", 'SMALL', overrides=custom_config)
-
-    wh_name = "test_db_small".upper()
-    wh = fort.snow.warehouses[wh_name].fetch()
-    assert wh is not None
-    assert wh.auto_suspend == 300
-    assert wh.min_cluster_count == 2
-    assert wh.max_cluster_count == 3
-
-
-def test_database_roles(fort: SnowFort):
-    """Test creation of database roles"""
-    env_db = "DEV_TEST_DB"
-    fort.snow.session.use_database(env_db)
-    # Verify roles exist
-    roles = list(fort.snow.databases[env_db].database_roles.iter())
-    assert len(roles) == 2
-    assert any(r.name == "READ_ONLY" for r in roles)
-    assert any(r.name == "READ_WRITE" for r in roles)
-
-
-def test_role_privileges(fort: SnowFort):
-    """Test proper privilege assignment for roles"""
-    env_db = "DEV_TEST_DB"
-    fort.snow.session.use_database(env_db)
-
-    # Get roles
-    ro_role = fort.snow.databases[env_db].database_roles["READ_ONLY"]
-    rw_role = fort.snow.databases[env_db].database_roles["READ_WRITE"]
-
-    def _verify_role_grants(role, expected_grants, expected_future_grants):
-        def _v(grants_to, expected):
-            grants = list(grants_to)
-            keepers = ['securable', 'securable_type',
-                       'grant_option', 'privileges']
-            grants_dicts = [{k: g.to_dict()[k] for k in keepers}
-                            for g in grants]
-            assert len(grants) == len(expected)
-            assert any(e in grants_dicts for e in expected)
-
-        _v(role.iter_grants_to(), expected_grants)
-        _v(role.iter_future_grants_to(), expected_future_grants)
-
-    # Verify RO privileges
-    _verify_role_grants(ro_role, [{
-        'securable': {'name': 'DEV_TEST_DB'},
-        'securable_type': 'DATABASE',
-        'grant_option': False,
-        'privileges': ['USAGE']
-    }], [{
-        'securable': {'database': 'DEV_TEST_DB', 'name': '"<TABLE>"'},
-        'securable_type': 'TABLE',
-        'grant_option': False,
-        'privileges': ['SELECT']
-    }])
-
-    # Verify RW privileges
-    _verify_role_grants(rw_role, [{
-        'securable': {'name': 'DEV_TEST_DB'},
-        'securable_type': 'DATABASE',
-        'grant_option': False,
-        'privileges': ['USAGE']
-    }, {
-        'securable': {'database': 'DEV_TEST_DB', 'name': 'DEV_TEST_DB_RO'},
-        'securable_type': 'DATABASE ROLE',
-        'grant_option': False,
-        'privileges': ['USAGE']
-    }], [{
-        'securable': {'database': 'DEV_TEST_DB', 'name': '"<TABLE>"'},
-        'securable_type': 'TABLE',
-        'grant_option': False,
-        'privileges': ['DELETE']
-    }, {
-        'securable': {'database': 'DEV_TEST_DB', 'name': '"<TABLE>"'},
-        'securable_type': 'TABLE',
-        'grant_option': False,
-        'privileges': ['INSERT']
-    }, {
-        'securable': {'database': 'DEV_TEST_DB', 'name': '"<TABLE>"'},
-        'securable_type': 'TABLE',
-        'grant_option': False,
-        'privileges': ['SELECT']
-    }, {
-        'securable': {'database': 'DEV_TEST_DB', 'name': '"<TABLE>"'},
-        'securable_type': 'TABLE',
-        'grant_option': False,
-        'privileges': ['UPDATE']
-    }])
+    return SnowFort(snow=snow, environment="dev")
 
 
 @pytest.fixture(autouse=True)
 def setup_teardown(fort: SnowFort):
     """Cleanup resources after each test"""
-    fort.snow.databases["DEV_TEST_DB"].drop(True)
-
-    # First create a test database
-    fort.create_if_not_exists_database(
-        "TEST_DB", "Test Database", prefix_with_environment=True)
+    try:
+        fort.database_manager.drop("TEST_DB", cascade=True)
+        fort.warehouse_manager.drop("TEST_WH")
+    except Exception as e:
+        print(f"Setup cleanup error: {e}")
 
     yield
 
-    # Clean up any resources created during tests
     try:
-        fort.snow.warehouses["dev_test_db_xsmall"].drop(True)
-        fort.snow.warehouses["prod_test_db_small"].drop(True)
-        fort.snow.databases["DEV_TEST_DB"].drop(True)
-        fort.snow.databases["DEV_TEST_DB2"].drop(True)
-    except:
-        pass
+        fort.database_manager.drop("TEST_DB", cascade=True)
+        fort.warehouse_manager.drop("TEST_WH")
+    except Exception as e:
+        print(f"Teardown cleanup error: {e}")
+
+
+def test_create_or_alter_warehouse(fort: SnowFort):
+    """Test end-to-end warehouse creation with default configuration"""
+    # Create warehouse
+    warehouse = fort.warehouse_manager.create(WarehouseConfig(
+        name="TEST_WH",
+        size="XSMALL",
+        auto_suspend=60,
+        auto_resume=True,
+        min_cluster_count=1,
+        max_cluster_count=1,
+        prefix_with_environment=True
+    ))
+
+    assert warehouse is not None
+    assert warehouse.name == "DEV_TEST_WH"
+    assert warehouse.warehouse_size == "XSMALL"
+    assert warehouse.auto_suspend == 60
+
+
+def test_create_database_with_roles(fort: SnowFort):
+    """Test end-to-end database creation with roles"""
+    # Create database
+    database = fort.database_manager.create(DatabaseConfig(
+        name="TEST_DB",
+        schemas=["SCHEMA1", "SCHEMA2"],
+        comment="Test database",
+        prefix_with_environment=True
+    ))
+
+    assert database is not None
+    assert database.name == "DEV_TEST_DB"
+
+    # Create roles
+    admin_role = fort.role_manager.create(RoleConfig(
+        name="TEST_DB_ADMIN",
+        comment="Admin role for TEST_DB",
+        prefix_with_environment=True
+    ))
+    write_role = fort.role_manager.create(RoleConfig(
+        name="TEST_DB_WRITE",
+        comment="Write role for TEST_DB",
+        prefix_with_environment=True
+    ))
+    read_role = fort.role_manager.create(RoleConfig(
+        name="TEST_DB_READ",
+        comment="Read role for TEST_DB",
+        prefix_with_environment=True
+    ))
+
+    assert admin_role.name == "DEV_TEST_DB_ADMIN"
+    assert write_role.name == "DEV_TEST_DB_WRITE"
+    assert read_role.name == "DEV_TEST_DB_READ"
+
+    # Grant privileges
+    fort.role_manager.grant_privilege(
+        "TEST_DB_ADMIN",
+        "OWNERSHIP",
+        "DATABASE",
+        "DEV_TEST_DB"
+    )
+    fort.role_manager.grant_privilege(
+        "TEST_DB_WRITE",
+        "WRITE",
+        "DATABASE",
+        "DEV_TEST_DB"
+    )
+    fort.role_manager.grant_privilege(
+        "TEST_DB_READ",
+        "READ",
+        "DATABASE",
+        "DEV_TEST_DB"
+    )
+
+    # Get all SQL calls for debugging
+    sql_calls = [call[0][0] for call in fort.snow.session.sql.call_args_list]
+    print("\nActual SQL calls:")
+    for call in sql_calls:
+        print(f"  {call}")
+
+    # Verify SQL calls for privilege grants
+    expected_grants = [
+        "GRANT OWNERSHIP ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_ADMIN",
+        "GRANT WRITE ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_WRITE",
+        "GRANT READ ON DATABASE DEV_TEST_DB TO ROLE DEV_TEST_DB_READ"
+    ]
+
+    for expected_grant in expected_grants:
+        assert any(
+            expected_grant in call for call in sql_calls
+        ), f"Grant not found in SQL calls: {expected_grant}"

@@ -1,0 +1,9 @@
+aws secretsmanager create-secret \
+        --name snowflake/accountadmin \
+        --secret-string '{
+            "account": "bhb32076",
+            "username": "noahgoodrich",
+            "private_key": "your-private-key",
+            "host": "bhb32076.us-west-2.snowflakecomputing.com",
+            "role": "ACCOUNTADMIN"
+        }

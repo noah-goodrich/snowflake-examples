@@ -1,0 +1,19 @@
+[run]
+source = 
+    forts
+    libs
+    resources
+
+[html]
+directory = tests/coverage/html
+
+[report]
+precision = 2
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    pass
+    raise ImportError
+    raise AssertionError 
