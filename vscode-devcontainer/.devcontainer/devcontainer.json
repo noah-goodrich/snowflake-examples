@@ -3,9 +3,9 @@
 {
   "name": "Python CDK with LocalStack",
   "dockerComposeFile": "./docker-compose.yml",
-  "service": "devcontainer",
+  "service": "vscode-devcontainer-app",
   "workspaceFolder": "/workspace",
-  "runServices": ["localstack"],
+  "runServices": ["vscode-devcontainer-localstack"],
   "features": {},
   "postStartCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt",
 

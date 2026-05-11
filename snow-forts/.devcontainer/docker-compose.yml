@@ -1,5 +1,5 @@
 services:
-  localstack:
+  snow-forts-localstack:
     container_name: "localstack-snowflake"
     image: localstack/snowflake
     hostname: localstack
@@ -13,7 +13,9 @@ services:
     volumes:
       - "./volume:/var/lib/localstack"
 
-  devcontainer:
+  snow-forts-app:
+    labels:
+      - dev.role=app
     build:
       context: .
       dockerfile: Dockerfile
@@ -22,7 +24,7 @@ services:
       - ~/.aws:/home/vscode/.aws:cached
       - ~/.zshrc:/home/vscode/.zshrc:cached
     command: sleep infinity
-    network_mode: service:localstack
+    network_mode: service:snow-forts-localstack
 
 volumes:
   devcontainer_volume:

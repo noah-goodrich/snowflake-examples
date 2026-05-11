@@ -1,5 +1,5 @@
 services:
-  localstack:
+  vscode-devcontainer-localstack:
     container_name: "localstack-snowflake"
     image: localstack/snowflake
     ports:
@@ -14,7 +14,9 @@ services:
     volumes:
       - "./volume:/var/lib/localstack"
 
-  devcontainer:
+  vscode-devcontainer-app:
+    labels:
+      - dev.role=app
     build:
       context: .
       dockerfile: Dockerfile
@@ -23,7 +25,7 @@ services:
       - ~/.aws:/home/vscode/.aws:cached
       - ~/.zshrc:/home/vscode/.zshrc:cached
     command: sleep infinity
-    network_mode: service:localstack
+    network_mode: service:vscode-devcontainer-localstack
 
 volumes:
   devcontainer_volume:

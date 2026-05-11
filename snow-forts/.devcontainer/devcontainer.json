@@ -3,9 +3,9 @@
 {
   "name": "Python CDK with LocalStack",
   "dockerComposeFile": "./docker-compose.yml",
-  "service": "devcontainer",
+  "service": "snow-forts-app",
   "workspaceFolder": "/foundation",
-  "runServices": ["localstack"],
+  "runServices": ["snow-forts-localstack"],
   "features": {},
   "postStartCommand": "pip install -r requirements.txt && pip install -r requirements-dev.txt",
 
